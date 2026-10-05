@@ -1,6 +1,6 @@
 # HEXR Window Tester — how to use it
 
-A Windows app for checking a HEXR glove and feeling what it can do. Connect a
+A Windows and macOS app for checking a HEXR glove and feeling what it can do. Connect a
 glove, drive any finger, and see what the hardware reports back. No code, no
 Unity, no SDK.
 
@@ -33,6 +33,22 @@ anyway**. Nothing is wrong; an unsigned installer simply has no certificate for
 Windows to check.
 
 You get a **HEXR Window Tester** icon on your desktop and in the Start menu.
+
+---
+
+### On a Mac
+
+Download **`HexR-Window-Tester-Mac.pkg`**, double-click it, and click through
+the installer (**Continue → Install**). It installs **HEXR Window Tester**
+into Applications; open it from there or from Launchpad.
+
+- macOS 10.13 or newer, on Apple silicon or Intel
+- The first time you press **Scan for gloves**, macOS asks whether the app may
+  use Bluetooth. Choose **Allow** — without it the app cannot see the glove. If
+  you clicked *Don't Allow*, turn it back on in System Settings → Privacy &
+  Security → Bluetooth.
+
+As on Windows, do not pair the glove in the Mac's Bluetooth settings.
 
 ---
 

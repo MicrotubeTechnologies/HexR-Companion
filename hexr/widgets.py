@@ -16,6 +16,7 @@ Generalised from `RoundButton` / `_round_pts` in the previous aris_console.py.
 
 from __future__ import annotations
 
+import sys
 import tkinter as tk
 
 from . import theme as T
@@ -985,6 +986,10 @@ class ScrollArea(tk.Frame):
         w = self.winfo_containing(x, y)
         while w is not None:
             if w is self:
-                self._canvas.yview_scroll(-1 * (e.delta // 120), "units")
+                # Windows reports multiples of 120 per notch; macOS reports
+                # small signed deltas, where // 120 would floor -1 to -1 and
+                # +1 to 0 and only ever scroll one way.
+                step = e.delta if sys.platform == "darwin" else e.delta // 120
+                self._canvas.yview_scroll(-1 * step, "units")
                 return
             w = getattr(w, "master", None)

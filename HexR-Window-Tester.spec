@@ -8,16 +8,20 @@
 # packaging\ turns into the single installer .exe, and what BUILD-INSTALLER.bat
 # also zips as the portable download.
 #
+# On macOS the same spec produces dist/HEXR Window Tester.app (a universal2
+# bundle when built with the python.org Python); tools/build_mac.sh signs,
+# notarizes and wraps it in a DMG.
+#
 # Deliberately not --onefile: a onefile build unpacks its whole ~15 MB payload
 # into a temp directory on EVERY launch, which is a visible startup delay and
 # pointless when an installer is laying the files down once anyway.
 
 import os
+import sys
 
 from PyInstaller.utils.hooks import collect_all
-from PyInstaller.utils.win32.versioninfo import (
-    FixedFileInfo, StringFileInfo, StringStruct, StringTable, VarFileInfo,
-    VarStruct, VSVersionInfo)
+
+MAC = sys.platform == "darwin"
 
 datas, binaries, hiddenimports = [], [], []
 for pkg in ("bleak",):
@@ -39,7 +43,11 @@ for _icon in ("assets/icon.ico", "assets/icon-16.png"):
     if os.path.exists(_icon):
         datas += [(_icon, "assets")]
 
-icon = "assets/icon.ico" if os.path.exists("assets/icon.ico") else None
+if MAC:
+    # tools/build_mac.sh generates icon.icns from icon.png before building.
+    icon = "assets/icon.icns" if os.path.exists("assets/icon.icns") else None
+else:
+    icon = "assets/icon.ico" if os.path.exists("assets/icon.ico") else None
 
 # The Windows version resource is built here from the VERSION file rather than
 # kept in a checked-in .txt that something has to rewrite. A build step that
@@ -50,22 +58,28 @@ with open("VERSION", encoding="utf-8") as _f:
 _parts = (APP_VERSION.split(".") + ["0", "0", "0", "0"])[:4]
 _quad = tuple(int(p) if p.isdigit() else 0 for p in _parts)
 
-version_res = VSVersionInfo(
-    ffi=FixedFileInfo(filevers=_quad, prodvers=_quad, mask=0x3F, flags=0x0,
-                      OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
-    kids=[
-        StringFileInfo([StringTable('040904B0', [
-            StringStruct('CompanyName', 'Microtube Technologies'),
-            StringStruct('FileDescription', 'HEXR Window Tester'),
-            StringStruct('FileVersion', '.'.join(str(n) for n in _quad)),
-            StringStruct('InternalName', 'HexR-Window-Tester'),
-            StringStruct('LegalCopyright', '© Microtube Technologies'),
-            StringStruct('OriginalFilename', 'HexR-Window-Tester.exe'),
-            StringStruct('ProductName', 'HEXR Window Tester'),
-            StringStruct('ProductVersion', '.'.join(str(n) for n in _quad)),
-        ])]),
-        VarFileInfo([VarStruct('Translation', [1033, 1200])]),
-    ])
+if MAC:
+    version_res = None
+else:
+    from PyInstaller.utils.win32.versioninfo import (
+        FixedFileInfo, StringFileInfo, StringStruct, StringTable, VarFileInfo,
+        VarStruct, VSVersionInfo)
+    version_res = VSVersionInfo(
+        ffi=FixedFileInfo(filevers=_quad, prodvers=_quad, mask=0x3F, flags=0x0,
+                          OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+        kids=[
+            StringFileInfo([StringTable('040904B0', [
+                StringStruct('CompanyName', 'Microtube Technologies'),
+                StringStruct('FileDescription', 'HEXR Window Tester'),
+                StringStruct('FileVersion', '.'.join(str(n) for n in _quad)),
+                StringStruct('InternalName', 'HexR-Window-Tester'),
+                StringStruct('LegalCopyright', '© Microtube Technologies'),
+                StringStruct('OriginalFilename', 'HexR-Window-Tester.exe'),
+                StringStruct('ProductName', 'HEXR Window Tester'),
+                StringStruct('ProductVersion', '.'.join(str(n) for n in _quad)),
+            ])]),
+            VarFileInfo([VarStruct('Translation', [1033, 1200])]),
+        ])
 
 # ship VERSION inside the bundle so the running app can report it too
 datas += [("VERSION", ".")]
@@ -95,16 +109,42 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=not MAC,                  # UPX corrupts macOS code signatures
     console=False,                # <-- no terminal window
     icon=icon,
     version=version_res,
+    target_arch="universal2" if MAC else None,
 )
 
 coll = COLLECT(
     exe, a.binaries, a.datas,
     strip=False,
-    upx=True,
+    upx=not MAC,
     upx_exclude=[],
     name='HexR-Window-Tester',
 )
+
+if MAC:
+    app = BUNDLE(
+        coll,
+        name='HEXR Window Tester.app',
+        icon=icon,
+        bundle_identifier='tech.microtube.hexr-window-tester',
+        version=APP_VERSION,
+        info_plist={
+            'CFBundleName': 'HEXR Window Tester',
+            'CFBundleDisplayName': 'HEXR Window Tester',
+            'CFBundleShortVersionString': APP_VERSION,
+            'CFBundleVersion': APP_VERSION,
+            'LSMinimumSystemVersion': '10.13',
+            'LSApplicationCategoryType': 'public.app-category.utilities',
+            'NSHighResolutionCapable': True,
+            'NSHumanReadableCopyright': '© Microtube Technologies',
+            # Without this macOS kills the app the moment bleak touches
+            # CoreBluetooth.
+            'NSBluetoothAlwaysUsageDescription':
+                'HEXR Window Tester uses Bluetooth to connect to your HEXR gloves.',
+            # Bundled IBM Plex faces, if present, are registered by macOS itself.
+            'ATSApplicationFontsPath': 'assets/fonts/',
+        },
+    )

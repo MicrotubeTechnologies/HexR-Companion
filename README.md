@@ -1,6 +1,6 @@
 # HEXR Window Tester
 
-A Windows app for testing HEXR haptic gloves. Scan, connect a left and/or right
+A Windows and macOS app for testing HEXR haptic gloves. Scan, connect a left and/or right
 glove, drive any channel, watch what the hardware reports back, and run a
 pass/fail sweep on all six channels.
 
@@ -27,6 +27,19 @@ Download `HexR-Window-Tester-Setup.exe` from the
 The build is not code signed, so SmartScreen will warn the first time: choose
 **More info → Run anyway**. Every release publishes SHA-256 sums and GitHub
 build provenance so the download can be verified.
+
+### macOS
+
+Download `HexR-Window-Tester-Mac.pkg`, double-click it, and follow the
+installer. It puts **HEXR Window Tester** in Applications.
+
+- macOS 10.13 or newer, Apple silicon or Intel (one universal app)
+- On first scan macOS asks for Bluetooth access — choose **Allow**. If it was
+  denied, re-enable it in System Settings → Privacy & Security → Bluetooth.
+
+On macOS the app uses the native window frame (close and minimise are the
+traffic lights), and Cmd-Q vents every channel before quitting, the same as
+closing the window.
 
 ## Run from source
 
@@ -119,6 +132,38 @@ The installer filename deliberately carries no version: GitHub resolves
 name would break that permalink on every release.
 
 ---
+
+## Building for macOS
+
+```
+tools/build_mac.sh
+```
+
+Builds a universal app with PyInstaller (same spec as Windows), signs it with
+the hardened runtime, wraps it in a signed installer at
+`dist/HexR-Window-Tester-Mac.pkg`, notarizes it with Apple and staples the
+ticket. That `.pkg` is the file to upload to the website. Like the Windows installer, the filename carries no version, so the
+download link can stay the same from release to release.
+
+One-time setup on the build Mac:
+
+1. **Python from python.org** (the universal2 installer). Homebrew's Python
+   produces an arm64-only app that will not start on macOS older than the
+   build machine.
+2. **Developer ID Application and Developer ID Installer certificates.** The
+   Apple Developer account holder creates both in Xcode → Settings → Accounts
+   → *team* → Manage Certificates → `+`. The first signs the app, the second
+   the installer. Check with `security find-identity -v`.
+3. **Notarization credentials.** Make an app-specific password at
+   account.apple.com (Sign-In and Security), then:
+
+   ```
+   xcrun notarytool store-credentials hexr-notary \
+     --apple-id <email> --team-id <TEAM_ID> --password <app-specific-password>
+   ```
+
+`tools/build_mac.sh --no-notarize` makes a local test build without the
+certificate; it runs only on the Mac that built it.
 
 ## Layout
 

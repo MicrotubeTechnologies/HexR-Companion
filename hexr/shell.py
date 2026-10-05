@@ -11,6 +11,11 @@ consequences of `overrideredirect(True)`:
 2. `iconify()` misbehaves on such a window, so minimise goes through
    `ShowWindow` on the real HWND instead.
 3. There is no OS frame to round or shadow, so DWM is asked for both directly.
+
+macOS keeps the native window frame instead. A frameless Tk window there never
+takes keyboard focus (so Escape, the panic key, would do nothing) and has no
+Dock or Cmd-Tab presence; the traffic lights already provide close, minimise
+and zoom, so the custom title bar is simply not built.
 """
 
 from __future__ import annotations
@@ -23,6 +28,8 @@ import tkinter as tk
 from . import theme as T
 from .widgets import (Button, IconButton, NavRow, StatusPill,
                       paint_maximise, paint_restore)
+
+MAC = sys.platform == "darwin"
 
 # Connect a glove, drive it, then run the canned QA sweep. Testing a single
 # channel by hand and running the full sweep are different jobs — one is
@@ -55,14 +62,21 @@ class Shell:
 
         self._set_window_icon(root)
         root.configure(bg=T.SURFACE)
-        root.geometry(f"{T.WIN_W}x{T.WIN_H}")
-        root.minsize(T.WIN_W, T.WIN_H)
-        root.overrideredirect(True)
+        self._win_h = T.WIN_H - (T.TITLEBAR_H + 1 if MAC else 0)
+        root.geometry(f"{T.WIN_W}x{self._win_h}")
+        root.minsize(T.WIN_W, self._win_h)
+        if MAC:
+            # Cmd-Q and the app menu's Quit bypass WM_DELETE_WINDOW; route
+            # them through close() so the gloves are vented on the way out.
+            root.createcommand("::tk::mac::Quit", self.close)
+        else:
+            root.overrideredirect(True)
         root.update_idletasks()
         self._centre()
         self._apply_win32()
 
-        self._build_titlebar()
+        if not MAC:
+            self._build_titlebar()
         self._build_header()
         self._build_body()
 
@@ -101,7 +115,7 @@ class Shell:
             return None
 
     def _centre(self):
-        w, h = T.WIN_W, T.WIN_H
+        w, h = T.WIN_W, self._win_h
         x = (self.root.winfo_screenwidth() - w) // 2
         y = max(0, (self.root.winfo_screenheight() - h) // 2 - 20)
         self.root.geometry(f"{w}x{h}+{x}+{y}")
@@ -142,6 +156,9 @@ class Shell:
             pass
 
     def minimise(self):
+        if MAC:
+            self.root.iconify()
+            return
         if sys.platform == "win32":
             try:
                 ctypes.windll.user32.ShowWindow(_hwnd_of(self.root), 6)  # SW_MINIMIZE

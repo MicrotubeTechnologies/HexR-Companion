@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- productbuild distribution for the macOS installer. tools/build_mac.sh
+     substitutes @VERSION@ and builds the component package it references. -->
+<installer-gui-script minSpecVersion="2">
+    <title>HEXR Window Tester</title>
+    <organization>tech.microtube</organization>
+    <welcome file="welcome.html" mime-type="text/html"/>
+    <conclusion file="conclusion.html" mime-type="text/html"/>
+    <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64"/>
+    <domains enable_localSystem="true" enable_currentUserHome="false" enable_anywhere="false"/>
+    <volume-check>
+        <allowed-os-versions>
+            <os-version min="10.13"/>
+        </allowed-os-versions>
+    </volume-check>
+    <choices-outline>
+        <line choice="app"/>
+    </choices-outline>
+    <choice id="app" visible="false" title="HEXR Window Tester">
+        <pkg-ref id="tech.microtube.hexr-window-tester"/>
+    </choice>
+    <pkg-ref id="tech.microtube.hexr-window-tester" version="@VERSION@" onConclusion="none">app.pkg</pkg-ref>
+</installer-gui-script>

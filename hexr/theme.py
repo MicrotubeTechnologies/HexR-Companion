@@ -112,6 +112,13 @@ _MONO_BY_WEIGHT = {
     600: "IBM Plex Mono SemiBold",
 }
 
+# Fallbacks when IBM Plex is unavailable: Windows ships Segoe UI / Consolas,
+# macOS ships Helvetica Neue / Menlo.
+if sys.platform == "darwin":
+    FALLBACK_SANS, FALLBACK_MONO = "Helvetica Neue", "Menlo"
+else:
+    FALLBACK_SANS, FALLBACK_MONO = "Segoe UI", "Consolas"
+
 # Resolved once by init(); until then everything falls back.
 _sans: dict[int, tuple[str, str]] = {}
 _mono: dict[int, tuple[str, str]] = {}
@@ -176,14 +183,15 @@ def init(root) -> str:
                 out[weight] = (fallback, "normal")
         return out
 
-    _sans = pick(_SANS_BY_WEIGHT, "Segoe UI", 600)
-    _mono = pick(_MONO_BY_WEIGHT, "Consolas", 600)
+    _sans = pick(_SANS_BY_WEIGHT, FALLBACK_SANS, 600)
+    _mono = pick(_MONO_BY_WEIGHT, FALLBACK_MONO, 600)
     HAVE_PLEX = "IBM Plex Sans" in available
 
     if HAVE_PLEX:
         FONT_NOTE = f"IBM Plex ({loaded} bundled files loaded)"
     else:
-        FONT_NOTE = ("IBM Plex not found — falling back to Segoe UI / Consolas. "
+        FONT_NOTE = (f"IBM Plex not found — falling back to {FALLBACK_SANS} / "
+                     f"{FALLBACK_MONO}. "
                      f"Drop the OFL TTFs into {os.path.normpath(FONT_DIR)}.")
     _cache.clear()
     return FONT_NOTE
@@ -196,7 +204,7 @@ def font(px: float, weight: int = 400, mono: bool = False) -> tkfont.Font:
         return _cache[key]
     table = _mono if mono else _sans
     if not table:                       # init() not called yet
-        family, style = ("Consolas" if mono else "Segoe UI",
+        family, style = (FALLBACK_MONO if mono else FALLBACK_SANS,
                          "bold" if weight >= 600 else "normal")
     else:
         # snap to the nearest defined weight

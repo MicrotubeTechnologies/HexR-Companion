@@ -9,3 +9,5 @@ assets/icon-preview.png
 
 __pycache__/
 *.py[cod]
+.venv-mac/
+assets/icon.icns
