@@ -331,6 +331,55 @@ class IconButton(tk.Canvas):
                              fill=fg, font=self._font)
 
 
+class GlovesButton(tk.Canvas):
+    """The header's way to the gloves while testing: the Bluetooth rune, "Gloves",
+    and a dot for how they are (green connected, orange scanning or connecting).
+
+    The rune is drawn, not typed: U+16D2 is missing from IBM Plex, like the
+    window marks below.
+    """
+
+    W, H = 118, 34
+
+    def __init__(self, parent, command=None, bg=None):
+        bg = bg or parent.cget("bg")
+        super().__init__(parent, width=self.W, height=self.H, bg=bg,
+                         highlightthickness=0, bd=0, cursor="hand2")
+        self.command = command
+        self._dot: str | None = None
+        self._hot = False
+        self._font = T.font(13, 600)
+        self._render()
+        self.bind("<Button-1>", lambda e: self.command and self.command())
+        self.bind("<Enter>", lambda e: self._hover(True))
+        self.bind("<Leave>", lambda e: self._hover(False))
+
+    def set(self, dot: str | None):
+        if dot != self._dot:
+            self._dot = dot
+            self._render()
+
+    def _hover(self, hot: bool):
+        self._hot = hot
+        self._render()
+
+    def _render(self):
+        self.delete("all")
+        draw_round(self, 0, 0, self.W - 1, self.H - 1, T.R_CTRL,
+                   fill=T.INSET if self._hot else T.RAISED,
+                   outline=T.ACCENT if self._hot else T.BORDER)
+        fg = T.ACCENT if self._hot else T.TEXT
+        x, y = 15, 8
+        self.create_line(x, y + 5, x + 9, y + 13, x + 4.5, y + 17, x + 4.5, y + 1,
+                         x + 9, y + 5, x, y + 13, fill=fg, width=1.6,
+                         capstyle="round", joinstyle="round")
+        self.create_text(34, self.H / 2, text="Gloves", anchor="w", fill=fg,
+                         font=self._font)
+        if self._dot:
+            self.create_oval(self.W - 20, 13, self.W - 12, 21, fill=self._dot,
+                             outline=self._dot)
+
+
 def paint_maximise(c: IconButton, fg: str, bg: str):
     """An empty square: this window is not filling the screen yet."""
     x, y, s = c.w / 2, c.h / 2, 4.5

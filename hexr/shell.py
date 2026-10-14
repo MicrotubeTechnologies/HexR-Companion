@@ -26,16 +26,20 @@ import sys
 import tkinter as tk
 
 from . import theme as T
-from .widgets import (Button, IconButton, NavRow, StatusPill,
+from .widgets import (Button, GlovesButton, IconButton, NavRow, StatusPill,
                       paint_maximise, paint_restore)
 
 MAC = sys.platform == "darwin"
 
-# Connect a glove, drive it, then run the canned QA sweep. Testing a single
-# channel by hand and running the full sweep are different jobs — one is
-# exploratory, one is pass/fail — so they get separate screens.
-STEPS = [("01", "Connect", "connect"), ("02", "Test", "test"),
-         ("03", "Quick test", "quicktest")]
+# Two jobs, two places: this computer's own gloves (Test), and the HEXR
+# headsets on the network (Headsets). Connecting and the quick test are both on
+# the way to testing a glove, so they live under Test rather than beside it:
+# Test is the scan until a glove connects, and then the header carries a Quick
+# test button and a Gloves button that open them as panels.
+STEPS = [("01", "Test", "test"), ("02", "Headsets", "headsets")]
+
+# Screens that belong to a rail entry without being it.
+NAV_OF = {"connect": "test", "quicktest": "test"}
 
 def _hwnd_of(widget) -> int:
     """The real top-level HWND, not Tk's child window."""
@@ -50,12 +54,16 @@ def _hwnd_of(widget) -> int:
 
 
 class Shell:
-    def __init__(self, root: tk.Tk, on_run=None):
+    def __init__(self, root: tk.Tk, on_nav=None, on_quick_test=None, on_gloves=None):
         self.root = root
-        self.on_run = on_run
-        self.screen = "connect"
+        # A rail click goes through the app, which knows whether Test is the
+        # scan or the controls right now.
+        self.on_nav = on_nav
+        self.on_quick_test = on_quick_test
+        self.on_gloves = on_gloves
+        self.screen = "test"
         self._screens: dict[str, tk.Frame] = {}
-        self._run_state = (None, None)
+        self._actions_shown = False
         # Where the window sits when it is not filling the screen. Restored
         # verbatim, so maximising and unmaximising is lossless.
         self._normal: tuple[int, int, int, int] | None = None
@@ -325,14 +333,17 @@ class Shell:
         right = tk.Frame(h, bg=T.SURFACE)
         right.pack(side="right", padx=(0, 22))
 
-        # The header button is the panic button. A haptics tester can leave a
-        # channel inflated against someone's finger, so "All off" has to be
-        # reachable from every screen without hunting for it.
-        self.run_btn = Button(right, "Connect a glove", command=self._run_clicked,
-                              height=34, fill=T.RAISED, fg=T.TEXT_2,
-                              border=T.BORDER, glyph="→", padx=20,
-                              min_width=190, font=T.font(13, 600))
-        self.run_btn.pack(side="right")
+        # While testing: the quick test and the gloves, as panels over the Test
+        # screen. Stopping is on the Test screen itself (Release, All off) and on
+        # Escape from anywhere, so the header no longer needs to be the panic
+        # button it once was.
+        self.actions = tk.Frame(right, bg=T.SURFACE)
+        self.gloves_btn = GlovesButton(self.actions, command=self._gloves_clicked)
+        self.gloves_btn.pack(side="right")
+        Button(self.actions, "Quick test", command=self._quick_test_clicked,
+               height=34, fill=T.RAISED, fg=T.TEXT, border=T.BORDER,
+               hover_fill=T.INSET, hover_fg=T.ACCENT, hover_border=T.ACCENT,
+               padx=18, font=T.font(13, 600)).pack(side="right", padx=(0, 10))
 
         self.status = StatusPill(right)
         self.status.pack(side="right", padx=(0, 12))
@@ -355,7 +366,7 @@ class Shell:
         top.pack(fill="x", pady=(14, 0), padx=10)
         self.nav: dict[str, NavRow] = {}
         for num, label, key in STEPS:
-            row = NavRow(top, num, label, command=lambda k=key: self.go(k))
+            row = NavRow(top, num, label, command=lambda k=key: self._nav_clicked(k))
             row.pack(fill="x", pady=1)
             self.nav[key] = row
 
@@ -397,7 +408,7 @@ class Shell:
         self._screens[key].pack(fill="both", expand=True)
         self.screen = key
         for k, row in self.nav.items():
-            row.set(active=(k == key))
+            row.set(active=(k == NAV_OF.get(key, key)))
         if hasattr(self._screens[key], "on_show"):
             self._screens[key].on_show()
 
@@ -410,40 +421,30 @@ class Shell:
     def set_status(self, dot: str, text: str):
         self.status.set(dot, text)
 
-    def set_run_state(self, state: str, label: str = "Start"):
-        """'blocked' | 'ready' | 'running'.
+    def set_test_actions(self, shown: bool, gloves_dot: str | None = None):
+        """Show the Quick test and Gloves buttons, while there is a glove to test."""
+        if shown != self._actions_shown:
+            self._actions_shown = shown
+            if shown:
+                self.actions.pack(side="right", before=self.status)
+            else:
+                self.actions.pack_forget()
+        if shown:
+            self.gloves_btn.set(gloves_dot)
 
-        A blocked button is not disabled. It carries the name of the one thing
-        in the way and, when clicked, goes there — a dead grey rectangle
-        reading "Connect first" told the user neither what was wrong (it might
-        well have been a board connected but nothing taught) nor where to fix
-        it, and swallowed the click that asked.
-        """
-        # sync_header runs on the UI tick, because liveness decays with time
-        # and the blocker can change without anyone clicking anything. Redraw
-        # only when the button would actually look different.
-        if (state, label) == self._run_state:
-            return
-        self._run_state = (state, label)
-        if state == "running":
-            self.run_btn.set(text=label, fill=T.INSET, fg=T.DANGER,
-                             border=T.DANGER, hover_fill=T.INSET,
-                             hover_fg=T.DANGER, hover_border=T.DANGER,
-                             glyph="■", disabled=False)
-        elif state == "ready":
-            self.run_btn.set(text=label, fill=T.ACCENT, fg=T.CANVAS,
-                             border=T.ACCENT, hover_fill=T.ACCENT_HOVER,
-                             hover_fg=T.CANVAS, hover_border=T.ACCENT_HOVER,
-                             glyph="▶", disabled=False)
+    def _nav_clicked(self, key: str):
+        if self.on_nav:
+            self.on_nav(key)
         else:
-            self.run_btn.set(text=label, fill=T.RAISED, fg=T.TEXT_2,
-                             border=T.BORDER, hover_fill=T.INSET,
-                             hover_fg=T.ACCENT, hover_border=T.ACCENT,
-                             glyph="→", disabled=False)
+            self.go(key)
 
-    def _run_clicked(self):
-        if self.on_run:
-            self.on_run()
+    def _quick_test_clicked(self):
+        if self.on_quick_test:
+            self.on_quick_test()
+
+    def _gloves_clicked(self):
+        if self.on_gloves:
+            self.on_gloves()
 
     # -- lifecycle -----------------------------------------------------------
 

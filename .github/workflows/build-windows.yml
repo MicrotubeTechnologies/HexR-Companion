@@ -74,6 +74,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt pyinstaller pillow
 
+      - name: Run the tests
+        run: |
+          python tests/test_protocol.py
+          python tests/test_remote.py
+
       # The icon is generated, not checked in as a finished asset. Drawing it
       # here means a release can never ship an icon that lags the generator.
       - name: Draw the app icon

@@ -24,7 +24,10 @@ from PyInstaller.utils.hooks import collect_all
 MAC = sys.platform == "darwin"
 
 datas, binaries, hiddenimports = [], [], []
-for pkg in ("bleak",):
+# PyAV, for the Headsets screen's live view, ships FFmpeg as DLLs beside its
+# extension modules; collect_all brings them along. Windows only, as in
+# requirements.txt.
+for pkg in ("bleak",) + (() if MAC else ("av",)):
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hiddenimports += h
 
@@ -144,6 +147,11 @@ if MAC:
             # CoreBluetooth.
             'NSBluetoothAlwaysUsageDescription':
                 'HEXR Window Tester uses Bluetooth to connect to your HEXR gloves.',
+            # macOS asks before an app may reach devices on the local network,
+            # and shows this when it does: the Headsets screen finds and talks
+            # to HEXR headsets on the same Wi-Fi.
+            'NSLocalNetworkUsageDescription':
+                'HEXR Window Tester finds and controls HEXR headsets on your local network.',
             # Bundled IBM Plex faces, if present, are registered by macOS itself.
             'ATSApplicationFontsPath': 'assets/fonts/',
         },

@@ -1,4 +1,5 @@
-"""Screen 01 — find gloves and connect them.
+"""Find gloves and connect them: the Test screen until a glove connects, then
+the Gloves panel over it.
 
 A kit is a left glove and a right glove, and they are independent BLE
 peripherals. Both can be connected at once and the rest of the app treats
@@ -20,10 +21,18 @@ from .base import Screen, section_label
 COLS = (None, 90, 150, 80, 130)
 
 
+SCAN_TITLE = "Connect a HEXR glove"
+SCAN_SUB = ("Power on the arm module and press scan. Left and right are "
+            "separate devices — connect either, or both. Testing starts as soon "
+            "as one connects.")
+PANEL_TITLE = "Gloves"
+PANEL_SUB = ("Connect the other glove, check battery and pressure, or "
+             "disconnect.")
+
+
 class ConnectScreen(Screen):
-    title_text = "Connect a HEXR glove"
-    sub_text = ("Power on the arm module and press scan. Left and right are "
-                "separate devices — connect either, or both.")
+    title_text = SCAN_TITLE
+    sub_text = SCAN_SUB
 
     def __init__(self, parent, app):
         super().__init__(parent, app)
@@ -32,7 +41,8 @@ class ConnectScreen(Screen):
 
         bar = tk.Frame(self.body, bg=T.SURFACE)
         bar.pack(fill="x")
-        self.scan_btn = Button(bar, "Scan for gloves", command=self._toggle_scan,
+        self._scan_label = "Scan for HEXR"
+        self.scan_btn = Button(bar, self._scan_label, command=self._toggle_scan,
                                glyph="→", min_width=170)
         self.scan_btn.pack(side="left")
         self.scan_status = tk.Label(bar, text="Bluetooth ready", bg=T.SURFACE,
@@ -50,6 +60,16 @@ class ConnectScreen(Screen):
 
         self.cards = tk.Frame(self.body, bg=T.SURFACE)
         self.cards.pack(fill="x", pady=(22, 0))
+
+    def set_mode(self, panel: bool, on_close=None):
+        """The scan in front of Test while nothing is connected, or the Gloves
+        panel over it once something is."""
+        self.set_heading(PANEL_TITLE if panel else SCAN_TITLE,
+                         PANEL_SUB if panel else SCAN_SUB)
+        self.set_close(on_close if panel else None)
+        self._scan_label = "Scan for gloves" if panel else "Scan for HEXR"
+        if not self.app.engine.scanning:
+            self.scan_btn.set(text=self._scan_label, glyph="→")
 
     # -- results table -------------------------------------------------------
 
@@ -131,7 +151,7 @@ class ConnectScreen(Screen):
         self.after(0, lambda: self._done_safe(error))
 
     def _done_safe(self, error):
-        self.scan_btn.set(text="Scan for gloves", glyph="→")
+        self.scan_btn.set(text=self._scan_label, glyph="→")
         if error:
             # A disabled adapter is not "no gloves found" — saying so sends
             # people hunting for a hardware fault that is not there.

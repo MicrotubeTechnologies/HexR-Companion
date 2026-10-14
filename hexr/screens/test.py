@@ -1,4 +1,5 @@
-"""Screen 02 — drive channels by hand and watch what the glove reports back.
+"""The Test screen once a glove is connected: drive channels by hand and watch
+what the glove reports back.
 
 Layout is control on the left, truth on the right: what you asked for, next to
 what the hardware actually did. Testing a haptic device without the pressure

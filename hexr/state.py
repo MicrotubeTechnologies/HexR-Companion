@@ -120,18 +120,3 @@ class AppState:
             g = self.gloves[hand]
             if not g.connected and not g.connecting:
                 del self.gloves[hand]
-
-    # -- readiness -----------------------------------------------------------
-
-    def readiness(self) -> tuple[str, str, str]:
-        """(state, button label, screen to go to when clicked).
-
-        A blocked button names the one thing in the way and navigates there;
-        a greyed-out rectangle reading "not ready" answers neither question
-        and swallows the click that asked.
-        """
-        if not self.any_connected():
-            return ("blocked", "Connect a glove", "connect")
-        if not self.test.channels:
-            return ("blocked", "Pick a channel", "test")
-        return ("ready", "All off", "test")
