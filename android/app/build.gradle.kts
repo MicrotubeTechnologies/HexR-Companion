@@ -167,6 +167,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
 
     testImplementation("junit:junit:4.13.2")
+    // Unit tests run on the JVM against a stubbed android.jar, whose org.json throws "not mocked".
+    // The real library stands in for it there; the app itself uses the copy built into Android.
+    testImplementation("org.json:json:20240303")
 }
 
 /**

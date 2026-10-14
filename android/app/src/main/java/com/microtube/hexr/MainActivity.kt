@@ -66,6 +66,7 @@ import com.microtube.hexr.ui.Caption
 import com.microtube.hexr.ui.PrimaryButton
 import com.microtube.hexr.ui.ConnectScreen
 import com.microtube.hexr.ui.Dot
+import com.microtube.hexr.ui.HeadsetsScreen
 import com.microtube.hexr.ui.HexrTheme
 import com.microtube.hexr.ui.QuickTestScreen
 import com.microtube.hexr.ui.Size
@@ -78,6 +79,7 @@ import kotlin.math.sin
 class MainActivity : ComponentActivity() {
 
     private val vm: HexrViewModel by viewModels()
+    private val headsets: HeadsetsViewModel by viewModels()
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -117,6 +119,7 @@ class MainActivity : ComponentActivity() {
             HexrTheme {
                 AppRoot(
                     vm = vm,
+                    headsets = headsets,
                     startTab = startTab,
                     onRequestPermissions = {
                         if (vm.mustUseSettings) {
@@ -150,14 +153,23 @@ class MainActivity : ComponentActivity() {
      */
     override fun onStop() {
         vm.onBackground()
+        // Headsets: sockets and the Wi-Fi multicast lock go with the screen. Nothing on that tab
+        // keeps working in a pocket, and the lock costs battery.
+        headsets.setForeground(false)
         super.onStop()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        headsets.setForeground(true)
     }
 }
 
 private enum class Tab(val label: String) {
     Connect("Connect"),
     Test("Test"),
-    Quick("Quick test");
+    Quick("Quick test"),
+    Headsets("Headsets");
 
     companion object {
         /** Resolve a [DemoSeed] scenario's tab name. Anything else is Connect. */
@@ -169,6 +181,7 @@ private enum class Tab(val label: String) {
 @Composable
 private fun AppRoot(
     vm: HexrViewModel,
+    headsets: HeadsetsViewModel,
     startTab: Tab,
     onRequestPermissions: () -> Unit,
     onOpenBluetoothSettings: () -> Unit,
@@ -219,6 +232,10 @@ private fun AppRoot(
                     Tab.Connect -> ConnectScreen(vm, onOpenBluetoothSettings)
                     Tab.Test -> TestScreen(vm)
                     Tab.Quick -> QuickTestScreen(vm)
+                    Tab.Headsets -> HeadsetsScreen(
+                        headsets,
+                        phoneGloves = HANDS.filter { vm.gloves[it]?.connected == true }.toSet(),
+                    )
                 }
             }
         }
@@ -499,7 +516,7 @@ private fun DrawScope.drawTabGlyph(index: Int, tint: Color) {
             drawPath(p, tint, style = Stroke(1.8f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
 
-        else -> {
+        2 -> {
             // Quick test: three channels at three different peaks.
             listOf(Triple(4f, 10f, 6f), Triple(8.7f, 6f, 10f), Triple(13.4f, 12f, 4f))
                 .forEach { (x, y, h) ->
@@ -509,6 +526,20 @@ private fun DrawScope.drawTabGlyph(index: Int, tint: Color) {
                         size = androidx.compose.ui.geometry.Size(2.6f * u, h * u),
                     )
                 }
+        }
+
+        else -> {
+            // Headsets: a visor seen from the front, two lenses under one band.
+            val stroke = Stroke(1.6f * u, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            drawRoundRect(
+                tint,
+                topLeft = Offset(2.5f * u, 6f * u),
+                size = androidx.compose.ui.geometry.Size(15f * u, 8.5f * u),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f * u, 3f * u),
+                style = stroke,
+            )
+            drawCircle(tint, radius = 1.6f * u, center = Offset(7f * u, 10.2f * u))
+            drawCircle(tint, radius = 1.6f * u, center = Offset(13f * u, 10.2f * u))
         }
     }
 }

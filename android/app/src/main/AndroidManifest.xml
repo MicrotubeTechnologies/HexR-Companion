@@ -29,6 +29,21 @@
         android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="30" />
 
+    <!--
+      The Headsets tab: finding HexR headsets on the local Wi-Fi and talking to them over it.
+
+      INTERNET is Android's name for opening any socket, including one that never leaves the
+      room: the app talks only to headsets on the same Wi-Fi, and nothing it sends goes further.
+      ACCESS_NETWORK_STATE lets it pin those sockets to the Wi-Fi network, so a router with no
+      internet behind it does not send them out over mobile data instead.
+      CHANGE_WIFI_MULTICAST_STATE is for the multicast lock: without one, the Wi-Fi driver drops
+      the broadcast packets headsets announce themselves with, to save power. It is held only
+      while the Headsets tab is open.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
     <!-- Required, not optional: without BLE this app does nothing at all. -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
