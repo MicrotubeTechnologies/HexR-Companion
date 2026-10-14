@@ -234,9 +234,12 @@ Press **Open** on a headset to see its gloves, its scene and its view.
   over its own Bluetooth. A glove talks to one thing at a time, so if this
   computer (or a phone) has it, disconnect it there first.
 - **Scene** — pick one and the headset switches to it.
-- **Watch** — the wearer is asked in the headset to allow sharing their view;
-  once they do, it appears here. **Stop watching** leaves the view running for
-  anyone else still watching it.
+- **Watch** — opens the viewer: the headset's view as big as the window
+  allows, with the gloves beside it, for an audience to follow. Maximise the
+  window, or put it on a projector, and the view grows with it. The wearer is
+  asked in the headset to allow sharing; once they do, the picture appears.
+  **Back** leaves the viewer, and leaves the view running for anyone else
+  still watching it.
 - **Name** — call a headset *Station 1* or similar. Headsets of one model all
   report the same name, so this is how you tell them apart. The name is kept on
   this computer.
