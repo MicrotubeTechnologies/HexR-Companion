@@ -81,10 +81,10 @@ This is a test and diagnostic instrument, not a runtime. HEXR gloves have no con
 HEXR and HEXR Tester are products of Microtube Technologies.
 ```
 
-### What's new — 500 max [338]
+### What's new — 500 max [380]
 
 ```
-New: the Headsets tab. Find every HEXR headset on your Wi-Fi, connect and disconnect its gloves, switch scenes, and watch what the wearer sees, all from the phone.
+New: the Headsets tab. Find every HEXR headset on your Wi-Fi, connect and disconnect its gloves, switch scenes, and watch what the wearer sees full screen, with their gloves beside it, to show an audience.
 
 A simpler layout: two tabs, Test and Headsets. Scan for HEXR when no glove is connected; once one is, the Quick test and Bluetooth buttons sit at the top of the Test screen.
 ```

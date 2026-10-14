@@ -8,12 +8,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -22,6 +29,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -31,8 +39,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -47,30 +57,41 @@ import com.microtube.hexr.remote.VideoPlayer
 import com.microtube.hexr.remote.WifiNetwork
 
 /**
- * Screen 04 — the HexR headsets on this Wi-Fi.
+ * The Headsets tab: the HexR headsets on this Wi-Fi.
  *
  * For running a demo rather than testing a glove: the facilitator stands beside someone in a
  * headset, connects their gloves from here, and watches what they see. Every headset with a HexR
  * app that has HexR Remote in it appears on its own; the gloves are the headset's, connected by
  * the headset, so nothing here uses this phone's Bluetooth.
  *
- * [phoneGloves] are the hands this phone itself holds on the Connect tab. A glove talks to one
+ * [phoneGloves] are the hands this phone itself holds on the Test tab. A glove talks to one
  * device at a time, so a headset cannot reach a glove this phone is holding, and the screen says
  * so rather than leave the headset's connect failing for no visible reason.
+ *
+ * [onImmersive] is told when the viewer opens and closes, so the app can hide its own header and
+ * tab bar and give the view the whole screen.
  */
 @Composable
-fun HeadsetsScreen(vm: HeadsetsViewModel, phoneGloves: Set<String>) {
+fun HeadsetsScreen(vm: HeadsetsViewModel, phoneGloves: Set<String>, onImmersive: (Boolean) -> Unit = {}) {
     DisposableEffect(Unit) {
         vm.setVisible(true)
-        onDispose { vm.setVisible(false) }
+        onDispose {
+            vm.setVisible(false)
+            onImmersive(false)
+        }
     }
 
+    val viewing = vm.viewing?.let { key -> vm.rows.firstOrNull { it.key == key } }
+    LaunchedEffect(viewing != null) { onImmersive(viewing != null) }
+
     val open = vm.selected?.let { key -> vm.rows.firstOrNull { it.key == key } }
-    if (open == null) {
-        HeadsetList(vm)
-    } else {
-        BackHandler { vm.select(null) }
-        HeadsetDetail(vm, open, phoneGloves)
+    when {
+        viewing != null -> HeadsetViewer(vm, viewing, phoneGloves)
+        open == null -> HeadsetList(vm)
+        else -> {
+            BackHandler { vm.select(null) }
+            HeadsetDetail(vm, open, phoneGloves)
+        }
     }
 }
 
@@ -268,38 +289,21 @@ private fun ViewSection(vm: HeadsetsViewModel, row: HeadsetRow, s: HeadsetStatus
     val stream = s.stream
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionLabel("What they see")
-        if (stream.live) {
-            Card(Modifier.fillMaxWidth(), fill = Color.Black) {
-                val ratio = if (stream.width > 0 && stream.height > 0) stream.width.toFloat() / stream.height else 1f
-                // A new session can come back on another port: start a fresh view for it.
-                key(row.host, stream.port) {
-                    HeadsetVideo(row.host, stream.port, Modifier.fillMaxWidth().aspectRatio(ratio))
+        // The view itself is in the viewer, full screen, so it can be shown to an audience.
+        val (text, tone) = streamWords(s)
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Caption(text, color = tone, size = Size.BODY_2)
+                if (stream.state != "unsupported" && s.allowVideo) {
+                    PrimaryButton(
+                        if (stream.live) "Watch full screen" else "Share headset view",
+                        Modifier.fillMaxWidth(),
+                        enabled = stream.live || (!s.paused && stream.state != "requesting"),
+                        onClick = { vm.openViewer(row.key) },
+                    )
                 }
-            }
-            Caption(
-                "${stream.width}×${stream.height}" + (if (stream.viewers > 1) " · ${stream.viewers} phones watching" else ""),
-                color = T.TEXT_5,
-            )
-            GhostButton("Stop sharing", Modifier.fillMaxWidth(), tint = T.RED, onClick = { vm.stopView(row.key) })
-        } else {
-            val (text, tone) = when (stream.state) {
-                "requesting" -> "Ask the person in the headset to allow screen sharing in the prompt in front of them." to T.ACCENT
-                "denied" -> "Screen sharing was not allowed in the headset. Ask again when they're ready." to T.AMBER
-                "unsupported" -> stream.message.ifEmpty { "This headset can't share its view." } to T.TEXT_5
-                "error" -> stream.message.ifEmpty { "Sharing the view failed." } to T.RED
-                else -> stream.message.ifEmpty { "Sharing needs the wearer's OK in the headset each time." } to T.TEXT_2
-            }
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Caption(text, color = tone, size = Size.BODY_2)
-                    if (stream.state != "unsupported") {
-                        PrimaryButton(
-                            if (stream.state == "requesting") "Waiting for the headset…" else "Share headset view",
-                            Modifier.fillMaxWidth(),
-                            enabled = s.allowVideo && !s.paused && stream.state != "requesting",
-                            onClick = { vm.startView(row.key) },
-                        )
-                    }
+                if (stream.live || stream.state == "requesting") {
+                    GhostButton("Stop sharing", Modifier.fillMaxWidth(), tint = T.RED, onClick = { vm.stopView(row.key) })
                 }
             }
         }
@@ -399,6 +403,200 @@ private fun GloveCard(
                 )
             }
         }
+    }
+}
+
+// -- the viewer ------------------------------------------------------------------------
+
+/**
+ * One headset's view, as big as the screen allows, for an audience to watch, with its gloves
+ * beside it.
+ *
+ * The app's header and tab bar step aside while it is open, and the screen stays awake. On a
+ * wide screen (a phone turned sideways, a foldable opened out, a tablet) the gloves sit in a
+ * column beside the view. Upright on a phone a side column would shrink the view to two-thirds
+ * of the width, so there they sit underneath it instead.
+ */
+@Composable
+private fun HeadsetViewer(vm: HeadsetsViewModel, row: HeadsetRow, phoneGloves: Set<String>) {
+    val s = row.status
+    val stream = s?.stream
+    val view = LocalView.current
+    DisposableEffect(Unit) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
+    BackHandler { vm.closeViewer() }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(T.SCREEN)
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .windowInsetsPadding(WindowInsets.navigationBars),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            ChipButton("‹ Back", onClick = { vm.closeViewer() })
+            Column(Modifier.weight(1f)) {
+                Label(row.title, size = Size.BODY, weight = FontWeight.SemiBold)
+                Caption(appLine(row), size = Size.LABEL)
+            }
+            val canAsk = s != null && s.allowVideo && stream != null && !stream.live &&
+                stream.state != "requesting" && stream.state != "unsupported"
+            if (canAsk) {
+                Pill("Ask to share", color = T.ACCENT, onClick = { vm.startView(row.key) })
+            }
+        }
+
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            if (maxWidth > maxHeight) {
+                Row(
+                    Modifier.fillMaxSize().padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    ViewerStage(row, s, Modifier.weight(1f).fillMaxHeight())
+                    Column(
+                        Modifier.width(210.dp).fillMaxHeight().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        ViewerGloves(vm, row, s, phoneGloves, vertical = true)
+                    }
+                }
+            } else {
+                Column(
+                    Modifier.fillMaxSize().padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    ViewerStage(row, s, Modifier.fillMaxWidth().weight(1f))
+                    ViewerGloves(vm, row, s, phoneGloves, vertical = false)
+                }
+            }
+        }
+    }
+}
+
+/** The picture, fitted to the space it is given, or what is happening instead of one. */
+@Composable
+private fun ViewerStage(row: HeadsetRow, s: HeadsetStatus?, modifier: Modifier) {
+    val stream = s?.stream
+    BoxWithConstraints(modifier.background(Color.Black), contentAlignment = Alignment.Center) {
+        if (stream != null && stream.live) {
+            val ratio = if (stream.width > 0 && stream.height > 0) stream.width.toFloat() / stream.height else 1f
+            val w = minOf(maxWidth, maxHeight * ratio)
+            // A new session can come back on another port: start a fresh view for it.
+            key(row.host, stream.port) {
+                HeadsetVideo(row.host, stream.port, Modifier.size(w, w / ratio))
+            }
+        } else {
+            val (text, tone) = if (s == null) {
+                "Connecting to the headset…" to T.TEXT_2
+            } else {
+                streamWords(s)
+            }
+            Text(
+                text,
+                Modifier.padding(24.dp),
+                color = tone,
+                fontSize = Size.BODY.sp,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+/** The headset's gloves for the viewer: a column beside the view, or a row under it. */
+@Composable
+private fun ViewerGloves(
+    vm: HeadsetsViewModel,
+    row: HeadsetRow,
+    s: HeadsetStatus?,
+    phoneGloves: Set<String>,
+    vertical: Boolean,
+) {
+    if (s == null) return
+    val canControl = s.allowGloveControl && !s.paused
+    val cards: @Composable (Modifier) -> Unit = { m ->
+        listOf(LEFT, RIGHT).forEach { hand ->
+            ViewerGlove(
+                hand = hand,
+                glove = s.glove(hand),
+                held = hand in phoneGloves,
+                canControl = canControl,
+                modifier = m,
+                onConnect = { vm.connectGlove(row.key, hand) },
+                onDisconnect = { vm.disconnectGlove(row.key, hand) },
+            )
+        }
+    }
+    if (vertical) {
+        cards(Modifier.fillMaxWidth())
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { cards(Modifier.weight(1f)) }
+    }
+    if (s.paused) {
+        Caption("Asleep: nobody is wearing it, so it takes no requests.", color = T.AMBER, size = Size.LABEL)
+    }
+    row.error?.let { Caption(it, color = T.RED, size = Size.LABEL) }
+}
+
+@Composable
+private fun ViewerGlove(
+    hand: String,
+    glove: GloveState?,
+    held: Boolean,
+    canControl: Boolean,
+    modifier: Modifier,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
+) {
+    val (word, color) = gloveWord(glove)
+    Card(modifier) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Label(hand, Modifier.weight(1f), size = Size.BODY_2, weight = FontWeight.SemiBold)
+                Pill(word, color = color)
+            }
+            MonoText(
+                (glove?.batteryPct?.takeIf { it >= 0 }?.let { "battery $it%" } ?: "battery —") +
+                    (glove?.kpa(6)?.takeIf { glove.connected }?.let { "  ·  src %.0f kPa".format(it) } ?: ""),
+                color = T.TEXT_2,
+                size = Size.LABEL,
+            )
+            if (held && glove?.connected != true) {
+                Caption("This phone holds this glove on the Test tab.", color = T.AMBER, size = Size.LABEL)
+            }
+            when {
+                glove == null || glove.missing -> Unit
+                glove.connected -> GhostButton("Disconnect", Modifier.fillMaxWidth(), tint = T.RED, enabled = canControl, height = 36, onClick = onDisconnect)
+                else -> PrimaryButton(
+                    if (glove.connecting) "Connecting…" else "Connect",
+                    Modifier.fillMaxWidth(),
+                    enabled = canControl && !glove.connecting,
+                    height = 36,
+                    onClick = onConnect,
+                )
+            }
+        }
+    }
+}
+
+/** What the share is doing, in words, and the colour to say it in. */
+private fun streamWords(s: HeadsetStatus): Pair<String, Color> {
+    val stream = s.stream
+    return when {
+        stream.live -> "Shared · ${stream.width}×${stream.height}" +
+            (if (stream.viewers > 1) " · ${stream.viewers} watching" else "") to T.GREEN
+        stream.state == "requesting" -> "Ask the person in the headset to allow screen sharing in the prompt in front of them." to T.ACCENT
+        stream.state == "denied" -> "Screen sharing was not allowed in the headset. Ask again when they're ready." to T.AMBER
+        stream.state == "unsupported" -> stream.message.ifEmpty { "This headset can't share its view." } to T.TEXT_5
+        stream.state == "error" -> stream.message.ifEmpty { "Sharing the view failed." } to T.RED
+        !s.allowVideo -> "This app doesn't share its view." to T.TEXT_5
+        s.paused -> "The headset is asleep. Sharing can be asked for once someone is wearing it." to T.AMBER
+        else -> stream.message.ifEmpty { "Sharing needs the wearer's OK in the headset each time." } to T.TEXT_2
     }
 }
 

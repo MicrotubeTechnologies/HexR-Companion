@@ -224,15 +224,20 @@ private fun AppRoot(
     onRequestPermissions: () -> Unit,
     onOpenBluetoothSettings: () -> Unit,
 ) {
-    var tab by remember { mutableStateOf(start.tab) }
-    var panel by remember { mutableStateOf(start.panel) }
+    // Saveable, so a rebuilt activity comes back where it was rather than on the Test tab with
+    // the splash playing again (the manifest already keeps rotating and folding from rebuilding
+    // it; this covers everything else, like a language or theme change).
+    var tab by rememberSaveable { mutableStateOf(start.tab) }
+    var panel by rememberSaveable { mutableStateOf(start.panel) }
+    // The Headsets viewer takes the whole screen: no header, no tab bar.
+    var immersive by remember { mutableStateOf(false) }
     // What the panel showed last, so it keeps its content while it slides away. A plain
     // holder, not state: it only changes in a composition that `panel` already caused.
     val lastPanel = remember { arrayOf(start.panel) }
     if (panel != Panel.None) lastPanel[0] = panel
     val shownPanel = lastPanel[0]
-    var splash by remember { mutableStateOf(true) }
-    var splashFading by remember { mutableStateOf(false) }
+    var splash by rememberSaveable { mutableStateOf(true) }
+    var splashFading by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         delay(1600)
@@ -273,7 +278,7 @@ private fun AppRoot(
         Scaffold(
             containerColor = T.SCREEN,
             topBar = {
-                Header(
+                if (!immersive) Header(
                     vm,
                     actions = if (!testing) {
                         null
@@ -291,7 +296,7 @@ private fun AppRoot(
                 )
             },
             bottomBar = {
-                BottomBar(tab) { picked ->
+                if (!immersive) BottomBar(tab) { picked ->
                     // Leaving the Test tab is leaving the only screen with a
                     // Release all on it, so the drive ends with the tab. The
                     // alternative is output running behind a screen that cannot
@@ -307,6 +312,7 @@ private fun AppRoot(
                     Tab.Headsets -> HeadsetsScreen(
                         headsets,
                         phoneGloves = HANDS.filter { vm.gloves[it]?.connected == true }.toSet(),
+                        onImmersive = { immersive = it },
                     )
                 }
             }

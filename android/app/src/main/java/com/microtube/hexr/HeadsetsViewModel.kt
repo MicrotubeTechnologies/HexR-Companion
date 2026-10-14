@@ -72,6 +72,10 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
     var selected by mutableStateOf<String?>(null)
         private set
 
+    /** The headset whose view fills the screen, by key, or null. */
+    var viewing by mutableStateOf<String?>(null)
+        private set
+
     private var visible = false
     private var foreground = true
     private var active = false
@@ -178,6 +182,24 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
 
     fun startView(key: String) = send(key, RemoteProtocol.stream("start"))
 
+    /** Watch: the view takes the screen, and the wearer is asked to share if nobody has yet. */
+    fun openViewer(key: String) {
+        val stream = entries[key]?.status?.stream
+        if (stream == null || (!stream.live && stream.state != "requesting")) startView(key)
+        viewing = key
+    }
+
+    /**
+     * Ending the share closes every viewer's connection, so it ends only if no other phone or
+     * computer is watching; otherwise this phone just leaves.
+     */
+    fun closeViewer() {
+        val key = viewing ?: return
+        viewing = null
+        val stream = entries[key]?.status?.stream ?: return
+        if ((stream.live || stream.state == "requesting") && stream.viewers <= 1) stopView(key)
+    }
+
     fun stopView(key: String) = send(key, RemoteProtocol.stream("stop"))
 
     private fun send(key: String, line: String) {
@@ -236,6 +258,7 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
             .sortedBy { it.title.lowercase() }
 
         if (selected != null && entries[selected] == null) selected = null
+        if (viewing != null && entries[viewing] == null) viewing = null
     }
 
     private fun newLink(key: String, host: String, port: Int) = HeadsetLink(key, host, port, wifi, this)

@@ -76,6 +76,7 @@
             android:exported="true"
             android:label="@string/app_name"
             android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@style/Theme.HexrTester">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
