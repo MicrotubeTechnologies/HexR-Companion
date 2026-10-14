@@ -93,13 +93,13 @@
   <h1>Privacy policy</h1>
   <p class="meta">
     HEXR Tester for Android &nbsp;·&nbsp; <code>com.microtube.hexr.tester</code>
-    &nbsp;·&nbsp; Last updated 7 September 2026
+    &nbsp;·&nbsp; Last updated 14 October 2026
   </p>
 
   <p class="lede">
     HEXR Tester is a diagnostic tool for HEXR pneumatic gloves, used by
     technicians to drive a glove's channels and read back its sensors over
-    Bluetooth.
+    Bluetooth, and to look after HEXR headsets on the same Wi-Fi at an event.
   </p>
 
   <h2>What it collects</h2>
@@ -111,19 +111,34 @@
   </p>
 
   <h2>What it sends</h2>
-  <p class="answer">Nothing.</p>
+  <p class="answer">Nothing beyond your own local network.</p>
   <p>
-    The app declares no internet permission, so the operating system will not
-    let it open a network connection even if it tried. Everything it does
-    happens between the phone and a glove over Bluetooth LE, on the bench in
-    front of you.
+    Gloves are reached over Bluetooth LE, on the bench in front of you.
+  </p>
+  <p>
+    The Headsets tab talks to HEXR headsets on the same Wi-Fi network as the
+    phone, and to nothing else. It listens for headsets announcing themselves,
+    sends them the commands you give (connect or disconnect a glove, change
+    scene), and reads back their status. When the person wearing a headset
+    agrees to it in the headset, the tab also receives that headset's view as
+    video and shows it on screen; the video is not recorded or stored. None of
+    this goes to Microtube or to anyone else: the app contacts no server on the
+    internet.
+  </p>
+  <p>
+    Android calls the permission to open any network connection, including one
+    that never leaves the room, the internet permission, so the app declares
+    it. See <em>Network permissions</em> below.
   </p>
 
   <h2>What it stores</h2>
   <p>
     Test results exist only while the app is open, in memory. Closing it
-    discards them. Nothing is written to storage and nothing is backed up — the
-    app sets <strong>allowBackup="false"</strong>.
+    discards them. The one thing written to storage is the name you may give a
+    headset on the Headsets tab (such as "Station 1"), kept in the app's private
+    storage on the phone so the name is still there next time. Nothing is backed
+    up — the app sets <strong>allowBackup="false"</strong> — and uninstalling
+    the app removes it.
   </p>
 
   <h2>Bluetooth and location permissions</h2>
@@ -140,6 +155,17 @@
     Bluetooth permissions, and location was the only way the platform allowed a
     Bluetooth scan at all. The app still only reads the advertised name of
     nearby gloves.
+  </p>
+
+  <h2>Network permissions</h2>
+  <p>
+    <strong>INTERNET</strong> lets the Headsets tab open connections to headsets
+    on the local Wi-Fi. <strong>ACCESS_NETWORK_STATE</strong> lets it keep those
+    connections on the Wi-Fi, so a router with no internet behind it does not
+    push them out over mobile data. <strong>CHANGE_WIFI_MULTICAST_STATE</strong>
+    lets the phone receive the broadcast each headset announces itself with; the
+    app holds it only while the Headsets tab is open. Android grants all three
+    when the app is installed, without asking.
   </p>
 
   <h2>Children</h2>

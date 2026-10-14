@@ -31,7 +31,7 @@ HEXR Tester
 Bluetooth bench tester for HEXR haptic gloves — drive, measure, pass or fail.
 ```
 
-### Full description — 4000 max [2873]
+### Full description — 4000 max [3486]
 
 ```
 HEXR Tester connects to a HEXR pneumatic haptic glove over Bluetooth LE and tells you whether it works.
@@ -46,7 +46,7 @@ THREE QUESTIONS IT ANSWERS
 
 CONNECT
 
-Scan and connect the left glove, the right, or both at once — they are separate Bluetooth devices and the app drives them independently. Each one shows its battery, its source pressure, its address and the negotiated MTU, and says whether telemetry is actually streaming.
+Open the app and scan. Connect the left glove, the right, or both at once — they are separate Bluetooth devices and the app drives them independently — and testing starts as soon as one connects. The Bluetooth button then shows each glove's battery, its source pressure, its address and the negotiated MTU, says whether telemetry is actually streaming, and connects the other glove.
 
 TEST
 
@@ -54,19 +54,23 @@ A tappable diagram of the glove stands in for a list of channel names. Select an
 
 QUICK TEST
 
-The canned sweep: every channel driven to full for two seconds, with peak pressure and time-to-peak recorded for each. Every channel comes back Good, Poor or Fail under one plain-English headline — and a dead pump is reported as one fault in the pump, not as six failed channels, so nobody goes replacing the wrong part.
+One button on the Test screen runs the canned sweep: every channel driven to full for two seconds, with peak pressure and time-to-peak recorded for each. Every channel comes back Good, Poor or Fail under one plain-English headline — and a dead pump is reported as one fault in the pump, not as six failed channels, so nobody goes replacing the wrong part.
 
 • Good — above 40 kPa, full pressure
 • Poor — 2 to 40 kPa, moved but never reached full
 • Fail — under 2 kPa, not working
 
+HEADSETS
+
+At an event, the Headsets tab finds every HEXR headset on the same Wi-Fi and looks after them from the phone, without taking a headset off anyone. Connect and disconnect each headset's gloves, see their battery and pressures, switch the scene, and — once the person wearing it agrees in the headset — watch what they see. Name each headset so you know which station is which. Headsets need a HEXR app built with HEXR 0.10.0 or newer with HEXR Remote added.
+
 SAFE BY DEFAULT
 
 Channels vent when you leave the Test screen, when a glove disconnects, and the moment the app goes to the background. A phone gets pocketed mid-test in a way a bench laptop does not, and a channel left inflated presses on someone's hand until the battery dies.
 
-NO ACCOUNT, NO NETWORK
+NO ACCOUNT, NOTHING SENT AWAY
 
-The app holds no internet permission at all, so the operating system will not let it open a connection even if it tried. It collects nothing, sends nothing, and keeps nothing after you close it. Everything happens between the phone and the glove in front of you.
+Gloves are reached over Bluetooth, and headsets over your own Wi-Fi; the app contacts no server on the internet. It collects nothing and sends nothing to Microtube or anyone else. The only thing it keeps after you close it is the names you give headsets.
 
 WHAT YOU NEED
 
@@ -77,15 +81,12 @@ This is a test and diagnostic instrument, not a runtime. HEXR gloves have no con
 HEXR and HEXR Tester are products of Microtube Technologies.
 ```
 
-### What's new — 500 max [292]
+### What's new — 500 max [338]
 
 ```
-First release of HEXR Tester for Android.
+New: the Headsets tab. Find every HEXR headset on your Wi-Fi, connect and disconnect its gloves, switch scenes, and watch what the wearer sees, all from the phone.
 
-• Connect a left glove, a right glove, or both over Bluetooth LE
-• Drive any of the six channels: steady pressure or 1-20 Hz vibration
-• Quick test sweeps all six and returns Good, Poor or Fail per channel
-• Live pressure on a tappable glove diagram
+A simpler layout: two tabs, Test and Headsets. Scan for HEXR when no glove is connected; once one is, the Quick test and Bluetooth buttons sit at the top of the Test screen.
 ```
 
 ---

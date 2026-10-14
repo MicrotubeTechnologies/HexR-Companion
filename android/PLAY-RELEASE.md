@@ -160,12 +160,15 @@ non-obvious:
 
 **App access.** The app needs a HEXR glove to do anything at all. Say so, in the
 *Instructions* box, and offer a video — a reviewer with no glove sees the
-Connect screen scanning and nothing else, and "we could not test the app" is a
+scan screen scanning and nothing else, and "we could not test the app" is a
 rejection.
 
-**Data safety.** No data collected, no data shared, no encryption question to
-answer, because the app makes no network connections at all. Say exactly that.
-A form claiming otherwise is checked against the actual bundle.
+**Data safety.** No data collected, no data shared. Since 1.1.0 the app does
+make network connections, for the Headsets tab, but only to HEXR headsets on the
+same local network: nothing goes to Microtube or any third party, which is what
+the form means by collected and shared. The one thing stored is a headset
+nickname, on the phone. Answer the form that way; it is checked against the
+actual bundle, which now declares INTERNET.
 
 **Permissions.** `BLUETOOTH_SCAN` is declared `neverForLocation`, so no location
 declaration is required and the app never asks for location on Android 12+. The
@@ -218,7 +221,7 @@ The cost, once: a technician who already has the old sideload gets the next one
 as a *second* app rather than an upgrade, and should uninstall the old one. Both
 apps look identical in the launcher, which is the one thing to watch for when
 someone reports a bug against "the app" — the build line at the bottom of the
-Connect screen is what tells them apart.
+scan screen (or the Gloves panel) is what tells them apart.
 
 ---
 
