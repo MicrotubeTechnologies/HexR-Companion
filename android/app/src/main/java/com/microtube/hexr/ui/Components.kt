@@ -113,9 +113,17 @@ fun Caption(
     modifier: Modifier = Modifier,
     color: Color = T.TEXT_5,
     size: Float = Size.CAPTION,
+    textAlign: TextAlign? = null,
 ) {
     if (text.isEmpty()) return
-    Text(text, modifier = modifier, color = color, fontSize = size.sp, lineHeight = (size * 1.4).sp)
+    Text(
+        text,
+        modifier = modifier,
+        color = color,
+        fontSize = size.sp,
+        lineHeight = (size * 1.4).sp,
+        textAlign = textAlign,
+    )
 }
 
 @Composable

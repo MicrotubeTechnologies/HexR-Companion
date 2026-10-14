@@ -19,7 +19,8 @@ import com.microtube.hexr.MAX_FREQUENCY_HZ
 import com.microtube.hexr.RIGHT
 
 /**
- * Screen 02 — pick channels on the glove itself, set the drive, trigger it.
+ * The Test tab once a glove is connected: pick channels on the glove itself, set the drive,
+ * trigger it. Until then the tab shows [ScanScreen] instead.
  *
  * The whole screen fits 390x844 without scrolling. That is the point of the
  * layout: this is the tab where you are holding a glove in one hand and the

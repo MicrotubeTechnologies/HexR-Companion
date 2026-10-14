@@ -43,7 +43,7 @@ Play build's `com.microtube.hexr.tester`. That is deliberate — the two are
 signed with different keys and Android will not install one over the other, so
 they are kept as separate apps rather than as an upgrade that always fails. Both
 appear in the launcher under the same name and icon; the build line at the
-bottom of the Connect screen is what tells them apart.
+bottom of the scan screen (or the Gloves panel) is what tells them apart.
 
 ### Getting it from the Play Store instead
 
@@ -108,7 +108,7 @@ difference — the same bytes arrive, just over several writes. A frame is never
 split across writes, which would desynchronise the firmware's parser instead of
 merely being slow.
 
-The Connect screen shows the negotiated MTU, and says so when a glove kept a
+The Gloves panel shows the negotiated MTU, and says so when a glove kept a
 small one. It matters for the quick test specifically: split writes mean the six
 channels no longer start at exactly the same instant, which is part of what that
 test measures.
@@ -154,13 +154,15 @@ android/
     Model.kt             port of hexr/state.py
     BleEngine.kt         GATT: queue, MTU, two concurrent gloves
     HexrViewModel.kt     UI state, and the quick-test state machine
-    MainActivity.kt      tabs, header, permission flow, vent-on-stop
+    MainActivity.kt      Test and Headsets tabs, header buttons, panels,
+                         permission flow, vent-on-stop
     DemoSeed.kt          canned state for the store screenshots, debug only
     ui/Theme.kt          tokens transcribed from hexr/theme.py
     ui/Components.kt     Cell, Meter, Panel, sliders, tables
-    ui/ConnectScreen.kt  screen 01
-    ui/TestScreen.kt     screen 02
-    ui/QuickTestScreen.kt screen 03
+    ui/ConnectScreen.kt  the scan screen (Test, no glove yet) and the Gloves panel
+    ui/TestScreen.kt     the Test tab once a glove is connected
+    ui/QuickTestScreen.kt the Quick test panel
+    ui/HeadsetsScreen.kt the Headsets tab (HexR Remote)
   app/src/test/java/com/microtube/hexr/
     ProtocolTest.kt      port of tests/test_protocol.py
   keystore.properties.example   shape of the gitignored signing config

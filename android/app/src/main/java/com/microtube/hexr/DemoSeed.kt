@@ -54,7 +54,9 @@ object DemoSeed {
     class Scenario(
         val gloves: List<DemoGlove>,
         /**
-         * Which tab to open on: "connect", "test" or "quick".
+         * Which screen to open on: "connect", "test" or "quick". They name the tabs this
+         * app had before connecting and the quick test became panels on the Test tab, and
+         * MainActivity opens the panel each one became.
          *
          * Carried here rather than left to the capture script tapping its way
          * across the bottom bar. Tap coordinates are a function of the screen

@@ -23,10 +23,10 @@ import com.microtube.hexr.QuickTest
 import com.microtube.hexr.Tone
 
 /**
- * Screen 03 — the canned QA sweep.
+ * The canned QA sweep, opened from the Quick test button in the header while testing.
  *
  * Drives every channel to full pressure at once, watches what each one reaches
- * and how fast, then judges it. Screen 02 is for exploring; this is for
+ * and how fast, then judges it. The Test tab is for exploring; this is for
  * deciding.
  *
  * Three verdicts, matching the desktop tester exactly so a result recorded on a
@@ -54,15 +54,12 @@ fun QuickTestScreen(vm: HexrViewModel) {
             .padding(T.PAGE_PAD),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Column {
-            Title("Quick test")
-            Caption(
-                "Drives every channel to full for two seconds and reports what each one " +
-                    "reached. Take the glove off first.",
-                Modifier.padding(top = 5.dp),
-                T.TEXT_2,
-            )
-        }
+        // The panel it opens in carries the title.
+        Caption(
+            "Drives every channel to full for two seconds and reports what each one " +
+                "reached. Take the glove off first.",
+            color = T.TEXT_2,
+        )
 
         Column {
             SectionLabel("Glove to test")

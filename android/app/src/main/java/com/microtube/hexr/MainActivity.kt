@@ -6,10 +6,12 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -17,23 +19,32 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -58,20 +69,24 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.microtube.hexr.ui.Caption
 import com.microtube.hexr.ui.PrimaryButton
-import com.microtube.hexr.ui.ConnectScreen
 import com.microtube.hexr.ui.Dot
+import com.microtube.hexr.ui.GlovesPanel
 import com.microtube.hexr.ui.HeadsetsScreen
 import com.microtube.hexr.ui.HexrTheme
 import com.microtube.hexr.ui.QuickTestScreen
+import com.microtube.hexr.ui.ScanScreen
 import com.microtube.hexr.ui.Size
 import com.microtube.hexr.ui.T
 import com.microtube.hexr.ui.TestScreen
+import com.microtube.hexr.ui.drawBluetoothRune
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
@@ -109,18 +124,18 @@ class MainActivity : ComponentActivity() {
         // only when a scenario is named on the intent — there is no way here
         // from the UI, and no way at all from the build that goes to Play.
         // See DemoSeed.kt.
-        var startTab = Tab.Connect
+        var start = Start(Tab.Test, Panel.None)
         if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
             val scenario = intent.getStringExtra("demo")
             scenario?.let(vm::seedDemo)
-            startTab = Tab.named(DemoSeed.startTabFor(scenario))
+            start = Start.named(DemoSeed.startTabFor(scenario))
         }
         setContent {
             HexrTheme {
                 AppRoot(
                     vm = vm,
                     headsets = headsets,
-                    startTab = startTab,
+                    start = start,
                     onRequestPermissions = {
                         if (vm.mustUseSettings) {
                             openAppSettings()
@@ -165,16 +180,39 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Two tabs: this phone's own gloves, and the headsets on the Wi-Fi.
+ *
+ * Connecting and the quick test used to be tabs of their own. They are both things you do on
+ * the way to testing a glove, so they now live on the Test tab: until a glove connects the tab
+ * is the scan, and after that the header carries a Quick test button and a Bluetooth button
+ * that open them as panels over the controls.
+ */
 private enum class Tab(val label: String) {
-    Connect("Connect"),
     Test("Test"),
-    Quick("Quick test"),
-    Headsets("Headsets");
+    Headsets("Headsets"),
+}
 
+/** What is open over the Test tab, if anything. */
+private enum class Panel(val title: String) {
+    None(""),
+    Gloves("Gloves"),
+    QuickTest("Quick test"),
+}
+
+/** Where the app opens: a tab, and on the Test tab perhaps one of its panels. */
+private data class Start(val tab: Tab, val panel: Panel) {
     companion object {
-        /** Resolve a [DemoSeed] scenario's tab name. Anything else is Connect. */
-        fun named(name: String?): Tab =
-            entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: Connect
+        /**
+         * A [DemoSeed] scenario's start screen. The scenarios predate the panels and still name
+         * the old tabs, so "connect" and "quick" open the panels those tabs became.
+         */
+        fun named(name: String?): Start = when (name?.lowercase()) {
+            "connect" -> Start(Tab.Test, Panel.Gloves)
+            "quick" -> Start(Tab.Test, Panel.QuickTest)
+            "headsets" -> Start(Tab.Headsets, Panel.None)
+            else -> Start(Tab.Test, Panel.None)
+        }
     }
 }
 
@@ -182,11 +220,17 @@ private enum class Tab(val label: String) {
 private fun AppRoot(
     vm: HexrViewModel,
     headsets: HeadsetsViewModel,
-    startTab: Tab,
+    start: Start,
     onRequestPermissions: () -> Unit,
     onOpenBluetoothSettings: () -> Unit,
 ) {
-    var tab by remember { mutableStateOf(startTab) }
+    var tab by remember { mutableStateOf(start.tab) }
+    var panel by remember { mutableStateOf(start.panel) }
+    // What the panel showed last, so it keeps its content while it slides away. A plain
+    // holder, not state: it only changes in a composition that `panel` already caused.
+    val lastPanel = remember { arrayOf(start.panel) }
+    if (panel != Panel.None) lastPanel[0] = panel
+    val shownPanel = lastPanel[0]
     var splash by remember { mutableStateOf(true) }
     var splashFading by remember { mutableStateOf(false) }
 
@@ -209,13 +253,43 @@ private fun AppRoot(
         }
     }
 
+    val anyGlove = HANDS.any { vm.gloves[it]?.connected == true }
+    // Testing: the Test tab with a glove to test. Until then the tab is the scan.
+    val testing = tab == Tab.Test && anyGlove
+
+    // Closing the quick test while it runs stops it, as leaving the Test tab
+    // vents a drive: otherwise every channel stays at full pressure behind a
+    // screen that can no longer stop it.
+    val closePanel = {
+        if (panel == Panel.QuickTest && vm.qtPhase in RUNNING_PHASES) vm.toggleQuickTest()
+        panel = Panel.None
+    }
+    BackHandler(enabled = panel != Panel.None, onBack = closePanel)
+
     Box(Modifier.fillMaxSize().background(T.SCREEN)) {
         if (!vm.permissionsGranted) {
             PermissionGate(vm.mustUseSettings, onRequestPermissions)
         } else {
         Scaffold(
             containerColor = T.SCREEN,
-            topBar = { Header(vm) },
+            topBar = {
+                Header(
+                    vm,
+                    actions = if (!testing) {
+                        null
+                    } else {
+                        {
+                            HeaderButton(
+                                label = "Quick test",
+                                description = "Quick test",
+                                glyph = { drawQuickTestGlyph(it) },
+                                onClick = { panel = Panel.QuickTest },
+                            )
+                            BluetoothButton(vm, onClick = { panel = Panel.Gloves })
+                        }
+                    },
+                )
+            },
             bottomBar = {
                 BottomBar(tab) { picked ->
                     // Leaving the Test tab is leaving the only screen with a
@@ -229,13 +303,25 @@ private fun AppRoot(
         ) { pad ->
             Box(Modifier.padding(pad).fillMaxSize()) {
                 when (tab) {
-                    Tab.Connect -> ConnectScreen(vm, onOpenBluetoothSettings)
-                    Tab.Test -> TestScreen(vm)
-                    Tab.Quick -> QuickTestScreen(vm)
+                    Tab.Test -> if (anyGlove) TestScreen(vm) else ScanScreen(vm, onOpenBluetoothSettings)
                     Tab.Headsets -> HeadsetsScreen(
                         headsets,
                         phoneGloves = HANDS.filter { vm.gloves[it]?.connected == true }.toSet(),
                     )
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = panel != Panel.None,
+            enter = slideInVertically(tween(220)) { it / 10 } + fadeIn(tween(220)),
+            exit = slideOutVertically(tween(180)) { it / 10 } + fadeOut(tween(180)),
+        ) {
+            PanelSheet(shownPanel.title, onClose = closePanel) {
+                when (shownPanel) {
+                    Panel.Gloves -> GlovesPanel(vm, onOpenBluetoothSettings)
+                    Panel.QuickTest -> QuickTestScreen(vm)
+                    Panel.None -> Unit
                 }
             }
         }
@@ -372,19 +458,25 @@ private fun Splash(modifier: Modifier = Modifier) {
 // -- header ---------------------------------------------------------------------
 
 /**
- * The lockup: mark, wordmark, product tag, connection state.
+ * The lockup: mark, wordmark, product tag, and either the connection state or, while testing,
+ * the Quick test and Bluetooth buttons in its place. The Bluetooth button's dot says what the
+ * state line would have, and there is not room on a phone for both.
  *
  * There is no All off here. Release all on the Test tab is the one stop, and
  * two buttons that both mean stop is one more thing to reason about in the
  * moment you least want to.
  */
 @Composable
-private fun Header(vm: HexrViewModel) {
+private fun Header(vm: HexrViewModel, actions: (@Composable RowScope.() -> Unit)? = null) {
     val connected = HANDS.filter { vm.gloves[it]?.connected == true }
     Column(Modifier.fillMaxWidth().background(T.SCREEN)) {
         Box(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars))
         Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp)
+                // As tall as the buttons, so the header does not jump when testing starts.
+                .height(HEADER_BUTTON.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
@@ -410,24 +502,137 @@ private fun Header(vm: HexrViewModel) {
                     letterSpacing = 0.9.sp,
                 )
             }
-            Row(
-                Modifier.padding(start = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                Dot(if (connected.isEmpty()) T.TEXT_FAINT else T.GREEN)
-                Caption(
-                    when {
-                        vm.driving -> "driving"
-                        connected.isEmpty() -> "no glove"
-                        else -> connected.joinToString(" + ") { it.lowercase() }
-                    },
-                    color = if (vm.driving) T.ACCENT else T.TEXT_2,
-                    size = Size.MICRO,
-                )
+            if (actions == null) {
+                Row(
+                    Modifier.padding(start = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Dot(if (connected.isEmpty()) T.TEXT_FAINT else T.GREEN)
+                    Caption(
+                        when {
+                            vm.driving -> "driving"
+                            connected.isEmpty() -> "no glove"
+                            else -> connected.joinToString(" + ") { it.lowercase() }
+                        },
+                        color = if (vm.driving) T.ACCENT else T.TEXT_2,
+                        size = Size.MICRO,
+                    )
+                }
+            } else {
+                Spacer(Modifier.weight(1f))
+                actions()
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(T.BORDER_SOFT))
+    }
+}
+
+private const val HEADER_BUTTON = 34
+
+/** A quick test that is still driving every channel. */
+private val RUNNING_PHASES = setOf("settle", "drive")
+
+/** One of the header's buttons: a glyph, and a word when there is room for one. */
+@Composable
+private fun HeaderButton(
+    label: String?,
+    description: String,
+    glyph: DrawScope.(Color) -> Unit,
+    badge: Color? = null,
+    onClick: () -> Unit,
+) {
+    Box {
+        Row(
+            Modifier
+                .height(HEADER_BUTTON.dp)
+                .clip(RoundedCornerShape(T.R_CARD))
+                .background(T.CARD)
+                .border(1.dp, T.BORDER, RoundedCornerShape(T.R_CARD))
+                .clickable(onClickLabel = description, onClick = onClick)
+                .semantics { contentDescription = description }
+                .padding(horizontal = if (label == null) 8.dp else 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Canvas(Modifier.size(18.dp)) { glyph(T.TEXT) }
+            if (label != null) {
+                Text(label, color = T.TEXT, fontSize = Size.BODY_2.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        if (badge != null) {
+            Dot(
+                badge,
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 2.dp, y = (-2).dp)
+                    .border(2.dp, T.SCREEN, CircleShape),
+                size = 10,
+            )
+        }
+    }
+}
+
+/**
+ * The gloves: what used to be the Connect tab, one tap away while testing. Its dot is the
+ * connection state at a glance: green while a glove is connected, orange while a scan or a
+ * connect is under way.
+ */
+@Composable
+private fun BluetoothButton(vm: HexrViewModel, onClick: () -> Unit) {
+    val busy = vm.scanning || HANDS.any { vm.gloves[it]?.connecting == true }
+    val connected = HANDS.filter { vm.gloves[it]?.connected == true }
+    HeaderButton(
+        label = null,
+        description = if (connected.isEmpty()) {
+            "Gloves: none connected"
+        } else {
+            "Gloves: " + connected.joinToString(" and ") { it.lowercase() } + " connected"
+        },
+        glyph = { drawBluetoothRune(it) },
+        badge = when {
+            busy -> T.ACCENT
+            connected.isNotEmpty() -> T.GREEN
+            else -> null
+        },
+        onClick = onClick,
+    )
+}
+
+/**
+ * A panel over the Test tab: Gloves or Quick test. Full screen, because both are things you
+ * look at properly rather than glance at, with its own title and a close button; Back closes it
+ * too. It takes every touch, so nothing reaches the controls underneath.
+ */
+@Composable
+private fun PanelSheet(title: String, onClose: () -> Unit, content: @Composable () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(T.SCREEN)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
+    ) {
+        Box(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars))
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                Modifier.weight(1f),
+                color = T.TEXT,
+                fontSize = Size.TITLE.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            HeaderButton(label = null, description = "Close", glyph = { drawCloseGlyph(it) }, onClick = onClose)
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(T.BORDER_SOFT))
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars),
+        ) { content() }
     }
 }
 
@@ -483,7 +688,7 @@ private fun BottomBar(current: Tab, onPick: (Tab) -> Unit) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
-                    Canvas(Modifier.size(20.dp)) { drawTabGlyph(t.ordinal, tint) }
+                    Canvas(Modifier.size(20.dp)) { drawTabGlyph(t, tint) }
                     Text(
                         t.label,
                         color = tint,
@@ -497,16 +702,10 @@ private fun BottomBar(current: Tab, onPick: (Tab) -> Unit) {
 }
 
 /** Tab glyphs on a 20-unit grid, matching the design source. */
-private fun DrawScope.drawTabGlyph(index: Int, tint: Color) {
+private fun DrawScope.drawTabGlyph(tab: Tab, tint: Color) {
     val u = size.width / 20f
-    when (index) {
-        0 -> {
-            // Connect: a target — the ring and the thing at its centre.
-            drawCircle(tint, radius = 6.5f * u, center = Offset(10 * u, 10 * u), style = Stroke(1.6f * u))
-            drawCircle(tint, radius = 2f * u, center = Offset(10 * u, 10 * u))
-        }
-
-        1 -> {
+    when (tab) {
+        Tab.Test -> {
             // Test: a pressure rise and fall.
             val p = Path().apply {
                 moveTo(3 * u, 13 * u)
@@ -516,19 +715,7 @@ private fun DrawScope.drawTabGlyph(index: Int, tint: Color) {
             drawPath(p, tint, style = Stroke(1.8f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
         }
 
-        2 -> {
-            // Quick test: three channels at three different peaks.
-            listOf(Triple(4f, 10f, 6f), Triple(8.7f, 6f, 10f), Triple(13.4f, 12f, 4f))
-                .forEach { (x, y, h) ->
-                    drawRect(
-                        tint,
-                        topLeft = Offset(x * u, y * u),
-                        size = androidx.compose.ui.geometry.Size(2.6f * u, h * u),
-                    )
-                }
-        }
-
-        else -> {
+        Tab.Headsets -> {
             // Headsets: a visor seen from the front, two lenses under one band.
             val stroke = Stroke(1.6f * u, cap = StrokeCap.Round, join = StrokeJoin.Round)
             drawRoundRect(
@@ -542,4 +729,25 @@ private fun DrawScope.drawTabGlyph(index: Int, tint: Color) {
             drawCircle(tint, radius = 1.6f * u, center = Offset(13f * u, 10.2f * u))
         }
     }
+}
+
+/** Quick test: three channels at three different peaks. Was the Quick test tab's glyph. */
+private fun DrawScope.drawQuickTestGlyph(tint: Color) {
+    val u = size.width / 20f
+    listOf(Triple(4f, 10f, 6f), Triple(8.7f, 6f, 10f), Triple(13.4f, 12f, 4f))
+        .forEach { (x, y, h) ->
+            drawRect(
+                tint,
+                topLeft = Offset(x * u, y * u),
+                size = androidx.compose.ui.geometry.Size(2.6f * u, h * u),
+            )
+        }
+}
+
+/** Close: a cross, on the same grid. */
+private fun DrawScope.drawCloseGlyph(tint: Color) {
+    val u = size.width / 20f
+    val stroke = 1.8f * u
+    drawLine(tint, Offset(5f * u, 5f * u), Offset(15f * u, 15f * u), stroke, StrokeCap.Round)
+    drawLine(tint, Offset(15f * u, 5f * u), Offset(5f * u, 15f * u), stroke, StrokeCap.Round)
 }
