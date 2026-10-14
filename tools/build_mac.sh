@@ -60,6 +60,7 @@ fi
 
 step "Running protocol tests"
 "$VENV/bin/python" tests/test_protocol.py
+"$VENV/bin/python" tests/test_remote.py
 
 # -------------------------------------------------------------- icon
 step "Generating icon.icns"

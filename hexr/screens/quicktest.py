@@ -1,9 +1,9 @@
-"""Screen 03 — the canned QA sweep.
+"""The canned QA sweep, a panel over the Test screen.
 
 Drives every channel to full pressure at once, watches what each one reaches
 and how fast, then judges it. This is the pass/fail check you run on a glove
-coming off the bench or back from a customer; screen 02 is for exploring, this
-is for deciding.
+coming off the bench or back from a customer; the Test screen is for
+exploring, this is for deciding.
 
 Ported from the Unity app's Quick Test. The verdict thresholds have since been
 retuned, so results are not directly comparable with anything the Unity app
@@ -164,6 +164,13 @@ class QuickTestScreen(Screen):
         self._t0 = time.monotonic()
         self.run_btn.set(text="Stop", glyph="■")
         self.status.configure(text="Venting…", fg=T.TEXT_MUTED)
+
+    def stop_if_running(self):
+        """For closing the panel mid-sweep. The sweep advances on this screen's
+        tick, which stops when it is hidden, so leaving it running would leave
+        every channel at full pressure. Abort instead, which vents the glove."""
+        if self._phase in ("settle", "drive"):
+            self._abort("Stopped")
 
     def _abort(self, why: str):
         self._phase = "idle"

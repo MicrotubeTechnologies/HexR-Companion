@@ -54,21 +54,31 @@ Python 3.10 or newer. The only runtime dependency is `bleak`.
 
 ## Using it
 
-**01 Connect** — power on the arm module, press scan. Gloves advertise as
-`HaptGloveAR Left` / `HaptGloveAR Right`; hand is read from that name. Both
-connect independently and can be driven at once.
+Two entries in the rail: **Test** for this computer's own gloves, **Headsets**
+for HEXR headsets on the network.
 
-**02 Test** — pick channels, pick pressure or vibration, set the levels, and
-trigger. Release vents them. The right-hand panel shows live per-channel
-pressure and battery straight from the glove, so a weak channel is visible
-rather than something you have to feel for.
+**Test** — until a glove connects it is the scan: power on the arm module,
+press **Scan for HEXR**. Gloves advertise as `HaptGloveAR Left` /
+`HaptGloveAR Right`; hand is read from that name. Both connect independently
+and can be driven at once. Once one connects, Test is the controls: pick
+channels, pick pressure or vibration, set the levels, and trigger. Release vents
+them. The right-hand panel shows live per-channel pressure and battery straight
+from the glove, so a weak channel is visible rather than something you have to
+feel for. While testing, the header has **Gloves** (connect the other glove,
+battery, disconnect) and **Quick test** (all six channels to full for two
+seconds, peak pressure and time-to-peak, a verdict per channel; take the glove
+off first), each a panel over Test.
 
-**03 Quick test** — drives all six channels to full for two seconds, records
-peak pressure and time-to-peak, and judges each channel. Take the glove off
-first.
+**Headsets** — every headset running a HEXR app with HexR Remote (HexR 0.10.0
+or newer) on the same network: connect and disconnect its gloves through it,
+change its scene, run its app's commands, and watch its view once the wearer
+allows it. The protocol is `Documentation~/RemoteProtocol.md` in the
+com.microtube.hexr package, the same one the Android app's Headsets tab speaks.
+The view needs PyAV, which only the Windows build ships.
 
-**Escape is the panic key**, and the header's **All off** button works from
-every screen. All channels are also vented on disconnect and on exit.
+**Escape is the panic key**, and **All off** sits beside Trigger and Release on
+the Test screen. All channels are also vented on disconnect, on exit, and when
+the Quick test panel is closed mid-run.
 
 ---
 
@@ -173,11 +183,13 @@ hexr/
   protocol.py         frame building and decoding — no I/O, fully testable
   engine.py           BLE: one asyncio loop, one client per hand
   state.py            the model the UI polls
+  remote.py           HexR Remote: discovery, control links, video, no Tk
+  headsets.py         the Headsets screen's model of every headset
   theme.py            design tokens
   widgets.py          the Canvas widget library
   shell.py            frameless window, title bar, nav rail
-  screens/            connect · test · quicktest
-tests/                protocol tests, no hardware needed
+  screens/            connect · test · quicktest · headsets
+tests/                protocol and remote tests, no hardware needed
 packaging/            Inno Setup script and wizard art
 tools/make_icon.py    generates the app icon
 ```

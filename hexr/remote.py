@@ -1,0 +1,575 @@
+"""HexR Remote: find the HEXR headsets on this network, control them, watch them.
+
+The other end is the HexR Remote component in the com.microtube.hexr Unity package, and its
+contract is that package's Documentation~/RemoteProtocol.md. The phone app speaks the same thing
+(android/app/src/main/java/com/microtube/hexr/remote/ on the android branch); the reference
+lines in tests/test_remote.py are the ones its tests and the package's use, so a change to the
+protocol is a change in all three.
+
+Three ports, all on the local network and nothing else:
+- 47800 UDP: every headset broadcasts an announcement every two seconds.
+- 47801 TCP: control, one JSON object per line each way.
+- 47802 TCP: the headset's view as H.264, while the wearer is sharing it.
+
+Nothing here touches Tk. Each connection runs on its own daemon thread and reports through
+callbacks, which run on that thread; the caller hops to Tk itself.
+"""
+
+from __future__ import annotations
+
+import json
+import socket
+import struct
+import threading
+import time
+from dataclasses import dataclass, field
+
+DISCOVERY_PORT = 47800
+CONTROL_PORT = 47801
+VIDEO_PORT = 47802
+PROTOCOL = 1
+CLIENT = "HexR Window Tester"
+
+# A headset sends its status five times a second, and once a second even while asleep, so this
+# much silence means it has gone. It drops a client it has not heard from in 15 s; the ping
+# keeps it from doing that.
+SILENT_AFTER_S = 4.0
+PING_EVERY_S = 5.0
+MAX_LINE = 16 * 1024
+
+HANDS = ("left", "right")
+
+
+# ---------------------------------------------------------------------------
+# Requests, client to headset
+# ---------------------------------------------------------------------------
+
+def _line(obj: dict) -> str:
+    # Compact and in insertion order: the reference lines are byte-for-byte.
+    return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+
+
+def hello(client: str = CLIENT) -> str:
+    return _line({"type": "hello", "protocol": PROTOCOL, "client": client})
+
+
+def ping() -> str:
+    return _line({"type": "ping"})
+
+
+def glove(action: str, hand: str) -> str:
+    return _line({"type": "glove", "action": action, "hand": hand})
+
+
+def release(hand: str | None = None) -> str:
+    return _line({"type": "release"} if hand is None else {"type": "release", "hand": hand})
+
+
+def scene(index: int) -> str:
+    return _line({"type": "scene", "index": index})
+
+
+def command(command_id: str) -> str:
+    return _line({"type": "command", "id": command_id})
+
+
+def stream(action: str) -> str:
+    return _line({"type": "stream", "action": action})
+
+
+# ---------------------------------------------------------------------------
+# What headsets send
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Announce:
+    id: str
+    name: str
+    model: str
+    platform: str
+    app: str
+    app_id: str
+    hexr_version: str
+    control: int
+    video: int
+    started_at: int
+
+
+@dataclass
+class GloveState:
+    hand: str
+    state: str                     # connected | connecting | disconnected | missing
+    message: str = ""
+    battery_pct: int = -1          # -1 until the glove has reported it
+    pressure_kpa: list[float] = field(default_factory=list)  # six channels, then the source
+
+    @property
+    def connected(self) -> bool:
+        return self.state == "connected"
+
+
+@dataclass
+class StreamState:
+    state: str = "off"             # off | requesting | live | denied | unsupported | error
+    port: int = 0
+    width: int = 0
+    height: int = 0
+    viewers: int = 0
+    message: str = ""
+
+
+@dataclass
+class Status:
+    id: str
+    name: str
+    model: str
+    platform: str
+    app: str
+    app_version: str
+    hexr_version: str
+    paused: bool
+    headset_battery_pct: int
+    scene_index: int
+    scene_name: str
+    scenes: list[tuple[int, str]]
+    gloves: dict[str, GloveState]
+    stream: StreamState
+    commands: list[tuple[str, str]]
+    allow_glove_control: bool
+    allow_video: bool
+    expose_scenes: bool
+    controllers: int
+
+
+def parse_json(text: str) -> dict | None:
+    """One JSON object, or None for anything else: a client never trusts the network."""
+    try:
+        obj = json.loads(text)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return obj if isinstance(obj, dict) else None
+
+
+def parse_announce(data: bytes) -> Announce | None:
+    obj = parse_json(data.decode("utf-8", "replace"))
+    if not obj or obj.get("hexr") != PROTOCOL or obj.get("type") != "announce" or not obj.get("id"):
+        return None
+    return Announce(
+        id=str(obj["id"]),
+        name=str(obj.get("name", "")),
+        model=str(obj.get("model", "")),
+        platform=str(obj.get("platform", "")),
+        app=str(obj.get("app", "")),
+        app_id=str(obj.get("appId", "")),
+        hexr_version=str(obj.get("hexrVersion", "")),
+        control=_int(obj.get("control"), CONTROL_PORT),
+        video=_int(obj.get("video"), VIDEO_PORT),
+        started_at=_int(obj.get("startedAt"), 0),
+    )
+
+
+def parse_status(obj: dict) -> Status:
+    scene_obj = obj.get("scene") or {}
+    gloves = {}
+    for g in obj.get("gloves") or []:
+        if not isinstance(g, dict) or g.get("hand") not in HANDS:
+            continue
+        gloves[g["hand"]] = GloveState(
+            hand=g["hand"],
+            state=str(g.get("state", "disconnected")),
+            message=str(g.get("message", "")),
+            battery_pct=_int(g.get("batteryPct"), -1),
+            pressure_kpa=[_int(p, 0) / 10 for p in g.get("pressureDeciKPa") or []],
+        )
+    s = obj.get("stream") or {}
+    return Status(
+        id=str(obj.get("id", "")),
+        name=str(obj.get("name", "")),
+        model=str(obj.get("model", "")),
+        platform=str(obj.get("platform", "")),
+        app=str(obj.get("app", "")),
+        app_version=str(obj.get("appVersion", "")),
+        hexr_version=str(obj.get("hexrVersion", "")),
+        paused=bool(obj.get("paused", False)),
+        headset_battery_pct=_int(obj.get("headsetBatteryPct"), -1),
+        scene_index=_int(scene_obj.get("index"), -1),
+        scene_name=str(scene_obj.get("name", "")),
+        scenes=[(_int(x.get("index"), -1), str(x.get("name", "")))
+                for x in obj.get("scenes") or [] if isinstance(x, dict)],
+        gloves=gloves,
+        stream=StreamState(
+            state=str(s.get("state", "off")),
+            port=_int(s.get("port"), 0),
+            width=_int(s.get("width"), 0),
+            height=_int(s.get("height"), 0),
+            viewers=_int(s.get("viewers"), 0),
+            message=str(s.get("message", "")),
+        ),
+        commands=[(str(c.get("id", "")), str(c.get("label", "")))
+                  for c in obj.get("commands") or [] if isinstance(c, dict)],
+        allow_glove_control=bool(obj.get("allowGloveControl", True)),
+        allow_video=bool(obj.get("allowVideo", True)),
+        expose_scenes=bool(obj.get("exposeScenes", True)),
+        controllers=_int(obj.get("controllers"), 0),
+    )
+
+
+def _int(value, default: int) -> int:
+    # bool is an int to Python, and never a valid number here.
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    return int(value)
+
+
+# -- video framing -----------------------------------------------------------
+
+VIDEO_MAGIC = b"HXV1"
+CODEC_H264 = 1
+FLAG_CONFIG = 1
+FLAG_KEYFRAME = 2
+
+
+def parse_video_header(header: bytes) -> tuple[int, int, int]:
+    """The 9 bytes a video connection starts with: (width, height, codec)."""
+    if len(header) != 9 or header[:4] != VIDEO_MAGIC:
+        raise ValueError("not a HexR video stream")
+    width, height, codec = struct.unpack(">HHB", header[4:])
+    return width, height, codec
+
+
+def parse_packet_header(header: bytes) -> tuple[int, int, int]:
+    """One packet's 13-byte header: (payload length, flags, presentation time in µs)."""
+    if len(header) != 13:
+        raise ValueError("short packet header")
+    return struct.unpack(">IBQ", header)
+
+
+# ---------------------------------------------------------------------------
+# Discovery
+# ---------------------------------------------------------------------------
+
+class Discovery:
+    """Listens for headsets announcing themselves.
+
+    `on_announce(announce, host)` runs for every announcement, about every two seconds per
+    headset. `on_error(message)` runs if the port cannot be opened at all: most often another
+    copy of this app, or the probe, already listening on it.
+
+    Windows Firewall decides whether anything arrives. The first time this listens Windows asks
+    whether to allow the app on private networks; if that was refused, or the Wi-Fi is set to a
+    public network, nothing arrives and no error says why. Adding a headset by its address still
+    works then, because that is a connection out rather than in.
+    """
+
+    def __init__(self, on_announce, on_error=None, port: int = DISCOVERY_PORT):
+        self._on_announce = on_announce
+        self._on_error = on_error
+        self._port = port
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, name="hexr-discovery", daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+
+    def _run(self):
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("", self._port))
+            sock.settimeout(1.0)
+        except OSError as e:
+            if self._on_error:
+                self._on_error(f"Cannot listen for headsets on UDP {self._port}: {e}")
+            return
+        with sock:
+            while not self._stop.is_set():
+                try:
+                    data, (host, _port) = sock.recvfrom(65535)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    if self._stop.wait(1.0):
+                        break
+                    continue
+                announce = parse_announce(data)
+                if announce:
+                    self._on_announce(announce, host)
+
+
+# ---------------------------------------------------------------------------
+# Control
+# ---------------------------------------------------------------------------
+
+class HeadsetLink:
+    """One headset's control connection: requests out, status and errors in.
+
+    It keeps itself connected: a link that goes quiet for SILENT_AFTER_S is dropped and
+    reopened, with a growing pause, until stop(). The listener gets
+    `on_link(key, state)` with "connecting", "connected" or "lost",
+    `on_status(key, status)` and `on_error(key, request, message)`.
+    """
+
+    def __init__(self, key: str, host: str, port: int, listener):
+        self.key = key
+        self.host = host
+        self.port = port
+        self._listener = listener
+        self._lock = threading.Lock()
+        self._sock: socket.socket | None = None
+        self._generation = 0
+        self._running = False
+
+    def start(self):
+        with self._lock:
+            if self._running:
+                return
+            self._running = True
+            self._generation += 1
+            gen = self._generation
+        threading.Thread(target=self._run, args=(gen,), name=f"hexr-link-{self.host}",
+                         daemon=True).start()
+
+    def stop(self):
+        with self._lock:
+            self._running = False
+            self._generation += 1
+            sock, self._sock = self._sock, None
+        _close(sock)
+
+    def retarget(self, host: str, port: int):
+        """The same headset at a new address or port (its app restarted): reconnect there."""
+        if (host, port) == (self.host, self.port):
+            return
+        self.host, self.port = host, port
+        with self._lock:
+            sock, self._sock = self._sock, None
+        _close(sock)  # the loop notices and reconnects to the new address
+
+    def send(self, line: str) -> bool:
+        with self._lock:
+            sock = self._sock
+        if sock is None:
+            return False
+        try:
+            sock.sendall((line + "\n").encode("utf-8"))
+            return True
+        except OSError:
+            return False
+
+    def _alive(self, gen: int) -> bool:
+        with self._lock:
+            return self._running and gen == self._generation
+
+    def _run(self, gen: int):
+        backoff = 0.5
+        while self._alive(gen):
+            self._listener.on_link(self.key, "connecting")
+            try:
+                sock = socket.create_connection((self.host, self.port), timeout=3.0)
+            except OSError:
+                self._listener.on_link(self.key, "lost")
+                if self._wait(gen, backoff):
+                    return
+                backoff = min(backoff * 2, 8.0)
+                continue
+
+            sock.settimeout(0.5)
+            with self._lock:
+                if not (self._running and gen == self._generation):
+                    _close(sock)
+                    return
+                self._sock = sock
+            self.send(hello())
+            self._listener.on_link(self.key, "connected")
+            backoff = 0.5
+            self._read(sock, gen)
+            with self._lock:
+                if self._sock is sock:
+                    self._sock = None
+            _close(sock)
+            if self._alive(gen):
+                self._listener.on_link(self.key, "lost")
+                if self._wait(gen, backoff):
+                    return
+
+    def _read(self, sock: socket.socket, gen: int):
+        buf = b""
+        last_heard = last_ping = time.monotonic()
+        while self._alive(gen):
+            now = time.monotonic()
+            if now - last_ping >= PING_EVERY_S:
+                self.send(ping())
+                last_ping = now
+            if now - last_heard > SILENT_AFTER_S:
+                return
+            try:
+                chunk = sock.recv(65536)
+            except socket.timeout:
+                continue
+            except OSError:
+                return
+            if not chunk:
+                return
+            last_heard = time.monotonic()
+            buf += chunk
+            while b"\n" in buf:
+                raw, buf = buf.split(b"\n", 1)
+                self._handle(raw.rstrip(b"\r"))
+            if len(buf) > MAX_LINE:
+                return
+
+    def _handle(self, raw: bytes):
+        obj = parse_json(raw.decode("utf-8", "replace"))
+        if not obj:
+            return
+        kind = obj.get("type")
+        if kind == "status":
+            self._listener.on_status(self.key, parse_status(obj))
+        elif kind == "error":
+            self._listener.on_error(self.key, str(obj.get("request", "")),
+                                    str(obj.get("message", "")))
+
+    def _wait(self, gen: int, seconds: float) -> bool:
+        """Sleep, but wake early if stopped. True if this loop should end."""
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            if not self._alive(gen):
+                return True
+            time.sleep(0.1)
+        return not self._alive(gen)
+
+
+def _close(sock):
+    if sock is None:
+        return
+    try:
+        sock.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
+    try:
+        sock.close()
+    except OSError:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Video
+# ---------------------------------------------------------------------------
+
+def video_available() -> str | None:
+    """None if this build can show a headset's view, otherwise why it cannot.
+
+    The view is H.264, decoded with PyAV, which brings its own FFmpeg. The Windows build ships
+    it. The macOS build is universal (Apple silicon and Intel in one app), and PyAV has no
+    universal wheel, so that build controls headsets but cannot show their view.
+    """
+    try:
+        import av  # noqa: F401
+    except ImportError:
+        return "This build cannot show a headset's view: it was made without PyAV."
+    return None
+
+
+class VideoReceiver:
+    """Reads one headset's view and keeps the newest frame, scaled and ready to draw.
+
+    Decoding runs on this thread. `latest()` hands the UI the newest frame as a binary PPM it
+    can put straight into a Tk PhotoImage, or None if there is nothing new since the last call;
+    frames the UI was too slow for are simply skipped. `state` and `message` say what it is
+    doing, for the screen to show.
+    """
+
+    def __init__(self, host: str, port: int, size: tuple[int, int]):
+        self.host = host
+        self.port = port
+        self._size = size
+        self._lock = threading.Lock()
+        self._frame: bytes | None = None
+        self._stop = threading.Event()
+        self._sock: socket.socket | None = None
+        self.state = "connecting"      # connecting | playing | ended | failed
+        self.message = ""
+        self.frames = 0
+        threading.Thread(target=self._run, name=f"hexr-video-{host}", daemon=True).start()
+
+    def resize(self, size: tuple[int, int]):
+        with self._lock:
+            self._size = size
+
+    def latest(self) -> bytes | None:
+        with self._lock:
+            frame, self._frame = self._frame, None
+        return frame
+
+    def stop(self):
+        self._stop.set()
+        _close(self._sock)
+
+    def _run(self):
+        try:
+            import av
+        except ImportError:
+            self.state, self.message = "failed", video_available() or ""
+            return
+        try:
+            sock = socket.create_connection((self.host, self.port), timeout=5.0)
+        except OSError as e:
+            self.state, self.message = "failed", f"Could not reach the view: {e}"
+            return
+        self._sock = sock
+        try:
+            sock.settimeout(10.0)
+            width, height, codec = parse_video_header(_read_exact(sock, 9))
+            if codec != CODEC_H264:
+                raise ValueError(f"unknown video codec {codec}")
+            decoder = av.CodecContext.create("h264", "r")
+            while not self._stop.is_set():
+                length, _flags, _pts = parse_packet_header(_read_exact(sock, 13))
+                payload = _read_exact(sock, length)
+                for packet in decoder.parse(payload):
+                    for frame in decoder.decode(packet):
+                        self._keep(frame)
+            self.state = "ended"
+        except (OSError, ValueError, EOFError) as e:
+            if self._stop.is_set() or isinstance(e, EOFError):
+                self.state, self.message = "ended", ""
+            else:
+                self.state, self.message = "failed", f"The view stopped: {e}"
+        except av.error.FFmpegError as e:
+            self.state, self.message = "failed", f"The view could not be decoded: {e}"
+        finally:
+            _close(sock)
+
+    def _keep(self, frame):
+        with self._lock:
+            w, h = self._size
+        # Scaled by FFmpeg's own scaler, here on the decode thread, so the UI only copies.
+        rgb = frame.reformat(width=w, height=h, format="rgb24")
+        plane = rgb.planes[0]
+        row = w * 3
+        data = bytes(plane)
+        if plane.line_size != row:
+            # Rows can be padded; a PPM wants them packed.
+            data = b"".join(data[y * plane.line_size:y * plane.line_size + row] for y in range(h))
+        ppm = b"P6 %d %d 255\n" % (w, h) + data
+        with self._lock:
+            self._frame = ppm
+        self.frames += 1
+        self.state = "playing"
+
+
+def _read_exact(sock: socket.socket, n: int) -> bytes:
+    buf = bytearray()
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            raise EOFError("the headset closed the view")
+        buf += chunk
+    return bytes(buf)

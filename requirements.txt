@@ -1,1 +1,6 @@
 bleak>=0.22.0
+# The Headsets screen's live view: H.264, decoded by PyAV with its own FFmpeg.
+# Windows only. The macOS build is universal (Apple silicon and Intel), and
+# PyAV has no universal wheel, so there the screen controls headsets without
+# showing their view (see hexr/remote.py, video_available).
+av>=12; sys_platform == "win32"

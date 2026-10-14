@@ -70,16 +70,25 @@ You do **not** pair the glove in Windows Bluetooth settings. Leave those alone
 
 ---
 
-## 01 · Connect
+## Two places: Test and Headsets
 
-Press **Scan for gloves**. Gloves appear as `HaptGloveAR Left` or
-`HaptGloveAR Right`, and the app reads which hand it is from that name.
+The rail on the left has two entries. **Test** is this computer's own gloves,
+over its Bluetooth. **Headsets** is the HEXR headsets on the network, at an
+event. Everything below up to Safety is Test.
 
-Press **Connect** on the row you want. A card appears below showing the hand,
-the battery level and the address.
+## Test · connecting a glove
+
+Open **Test**. Until a glove is connected it is the scan: press
+**Scan for HEXR**. Gloves appear as `HaptGloveAR Left` or `HaptGloveAR Right`,
+and the app reads which hand it is from that name.
+
+Press **Connect** on the row you want. The moment a glove connects, Test turns
+into the controls below.
 
 You can connect **both gloves at once**. They are separate devices and
-everything after this treats them separately.
+everything after this treats them separately. To connect the second one, check
+a glove's battery or disconnect it, press **Gloves** at the top right while
+testing. It opens over Test; **Close** goes back.
 
 **Nothing found?** The arm module is probably not switched on — press and hold
 the power button and scan again. If the status says *Bluetooth unavailable*,
@@ -87,7 +96,7 @@ that is your PC's adapter, not the glove.
 
 ---
 
-## 02 · Test
+## Test · driving channels
 
 This is where you feel things.
 
@@ -166,10 +175,12 @@ Quick test, which needs the readings to measure anything.
 
 ---
 
-## 03 · Quick test
+## Quick test
 
 The pass/fail check. Use it on a glove coming off the bench, or one back from a
-customer.
+customer. Press **Quick test** at the top right while testing; **Close** goes
+back to Test, and closing it in the middle of a run stops the run and vents the
+glove.
 
 **Take the glove off first.** It drives all six channels to full at once.
 
@@ -206,12 +217,46 @@ Drag the bar to move the window. There is no OS frame — the app draws its own.
 
 ---
 
+## Headsets
+
+At an event, the headsets running a HEXR app can be looked after from here
+without taking one off anyone: connect and disconnect their gloves, change the
+scene, run the app's own commands, and watch what the wearer sees.
+
+A headset shows up when its app was built with **HexR 0.10.0 or newer with
+HexR Remote added**, it is on the **same network** as this computer, and the
+app is open. It reports *asleep* while nobody is wearing it, and then refuses
+commands until someone puts it on.
+
+Press **Open** on a headset to see its gloves, its scene and its view.
+
+- **Gloves** — Connect or Disconnect each one. The headset does the connecting,
+  over its own Bluetooth. A glove talks to one thing at a time, so if this
+  computer (or a phone) has it, disconnect it there first.
+- **Scene** — pick one and the headset switches to it.
+- **Watch** — the wearer is asked in the headset to allow sharing their view;
+  once they do, it appears here. **Stop watching** leaves the view running for
+  anyone else still watching it.
+- **Name** — call a headset *Station 1* or similar. Headsets of one model all
+  report the same name, so this is how you tell them apart. The name is kept on
+  this computer.
+
+**No headsets appear?** The first time you open Headsets, Windows asks whether
+to allow the app on networks: allow it on **private** networks, and make sure
+the Wi-Fi is set to *Private* in Windows settings. Event Wi-Fi often stops
+devices seeing each other; type the headset's IP address into
+**Headset address** and press **Add** instead, or bring your own router.
+
+On a Mac the Headsets screen controls headsets but cannot show their view yet.
+
+---
+
 ## Safety
 
 A haptic glove can hold a finger squeezed. Three ways to stop everything:
 
 - **Escape** — works anywhere in the app
-- **All off** — the red button in the top-right corner, on every screen
+- **All off** — the red button beside Trigger and Release on the Test screen
 - **Close the app** — every channel is vented on the way out
 
 Channels are also vented automatically when you disconnect a glove.
