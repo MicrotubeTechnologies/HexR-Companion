@@ -1,14 +1,15 @@
-"""The glove over a headset's view: microtube.tech/hexr's six touch points, lit as the glove fires.
+"""The HEXR glove and its six touch points, lit as the glove fires.
 
 Pressure glows and holds, a vibration sends rings out from the touch point, and a caption reads
-PRESS. HOLD. RELEASE. or PULSE. BUZZ. CLICK., as on the website and in HexR Overlay Studio.
+PRESS. HOLD. RELEASE. or PULSE. BUZZ. CLICK. The glove is orange, so what fires glows white-hot
+and each touch point is a dark-ringed dot; a verdict (the quick test's) colours both instead.
 
 It draws onto a PIL image in place, at whatever size that image is: the screen and a recording
 each draw their own, so both are sharp. Everything scales with the glove's height. What never
 changes from frame to frame (the panel, the glove, its shadow) is drawn once and kept, and the
 small round shapes are drawn three times over and scaled down so their edges are smooth.
 
-Like the website, its words are English: they are part of the picture, not the app's text.
+Its words are English: they are part of the picture, not the app's text.
 A GloveOverlay is not shared between threads; the screen and a recording each have their own.
 """
 
@@ -22,17 +23,20 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from . import theme as T
 from .haptics import HandState
 
-ORANGE = (242, 102, 26)
+ORANGE = (242, 102, 26)       # the caption's lit word
 WHITE = (255, 255, 255)
+FIRE = (255, 246, 226)        # what fires, on the orange glove: white-hot
+DOT = (24, 25, 28)            # a touch point's ring, dark on the orange
+TAG = (17, 18, 20)            # a finger's name tag
 
-# Touch points on the glove art, a right hand with its palm towards the viewer, as fractions of
-# the picture (the same points as the website); the left hand is drawn mirrored.
-# (x, y, its label goes to the left)
-DOTS = ((.87, .3233, False), (.50, .0758, False), (.457, .4749, True), (.423, .5951, True),
-        (.337, .6895, True), (.59, .7081, False))
+# Touch points on the glove art, a right hand with its palm towards the viewer, fingers spread,
+# as fractions of the picture: the pads of the fingertips and the middle of the palm. The left
+# hand is drawn mirrored. (x, y, its label goes to the left)
+DOTS = ((.8802, .3475, False), (.5951, .1158, False), (.4232, .0772, True),
+        (.2591, .1251, True), (.1042, .2069, True), (.5469, .6178, False))
 NAMES = ("THUMB", "INDEX", "MIDDLE", "RING", "PINKY", "PALM")
 WORDS = (("PRESS.", "HOLD.", "RELEASE."), ("PULSE.", "BUZZ.", "CLICK."))
-GLOVE_ASPECT = 520 / 885
+GLOVE_ASPECT = 768 / 1295
 SS = 3                       # supersampling for round shapes
 
 
@@ -110,15 +114,15 @@ class GloveOverlay:
         tags = []
         for ch, (cx, cy) in enumerate(touch_points(hand, gh, look)):
             left = DOTS[ch][2] != (hand == "left")
-            rgb = tuple(st.tints[ch]) if st.tints and st.tints[ch] else ORANGE
+            tint = tuple(st.tints[ch]) if st.tints and st.tints[ch] else None
             level = st.levels[ch]
-            _put(panel, self._glow(gh, level, rgb), cx, cy)
+            _put(panel, self._glow(gh, level, tint or FIRE), cx, cy)
             if st.vibrating[ch] > 0:
                 rate = min(st.vibrating[ch], 2.5)
                 for k in range(2):
                     phase = (st.since[ch] * rate + k / 2) % 1
                     _put(top, self._ring(gh, gh * .03 * (1 + 2.4 * phase), (1 - phase) * .9), cx, cy)
-            _put(top, self._core(gh, .35 + .65 * level, rgb), cx, cy)
+            _put(top, self._core(gh, .55 + .45 * level, tint or DOT), cx, cy)
             show = (.55 + .45 * min(1, level * 2) if look.labels == "always" else
                     min(1.0, max(0.0, (level - .08) * 4)) if look.labels == "active" else 0)
             if show > 0:
@@ -127,6 +131,7 @@ class GloveOverlay:
             tag = self._tag(gh, name, hot, show)
             off = gh * .045
             tx = cx - off - tag.width / 2 if left else cx + off + tag.width / 2
+            tx = min(max(tx, tag.width / 2), panel.width - tag.width / 2)     # inside the panel
             _put(top, tag, tx, cy - tag.height * .3)
         if look.caption:
             cap = self._caption(gh, panel.width, st)
@@ -185,7 +190,7 @@ class GloveOverlay:
         """Forget every piece kept: for a view whose size keeps changing."""
         self._cache.clear()
 
-    def _glow(self, gh: int, level: float, rgb=ORANGE) -> Image.Image:
+    def _glow(self, gh: int, level: float, rgb=FIRE) -> Image.Image:
         step = round(level * 32)
         key = ("glow", gh, step, rgb)
         if key not in self._cache:
@@ -203,17 +208,20 @@ class GloveOverlay:
             self._cache[key] = sprite
         return self._cache[key]
 
-    def _core(self, gh: int, alpha: float, rgb=ORANGE) -> Image.Image:
+    def _core(self, gh: int, alpha: float, rgb=DOT) -> Image.Image:
         step = round(alpha * 16)
         key = ("core", gh, step, rgb)
         if key not in self._cache:
             a = step / 16
             r, ring = gh * .016, gh * .008
             outer = r + gh * .004 + ring / 2
-            size = int(math.ceil(outer * 2)) + 4
+            edge = outer + gh * .005          # dark, so a verdict's colour shows on the orange
+            size = int(math.ceil(edge * 2)) + 4
 
             def paint(d, s):
                 c = size * s / 2
+                d.ellipse((c - edge * s, c - edge * s, c + edge * s, c + edge * s),
+                          fill=DOT + (int(230 * a),))
                 d.ellipse((c - outer * s, c - outer * s, c + outer * s, c + outer * s),
                           fill=tuple(rgb) + (int(230 * a),))
                 d.ellipse((c - r * s, c - r * s, c + r * s, c + r * s), fill=WHITE + (int(255 * a),))
@@ -230,8 +238,8 @@ class GloveOverlay:
             def paint(d, s):
                 c = size * s / 2
                 d.ellipse((c - rq * s, c - rq * s, c + rq * s, c + rq * s),
-                          outline=ORANGE + (int(255 * aq / 12),), width=max(1, int(width * s)))
-            self._cache[key] = _supersampled((size, size), paint, ORANGE)
+                          outline=FIRE + (int(255 * aq / 12),), width=max(1, int(width * s)))
+            self._cache[key] = _supersampled((size, size), paint, FIRE)
         return self._cache[key]
 
     def _tag(self, gh: int, name: str, hot: bool, alpha: float) -> Image.Image:
@@ -243,7 +251,7 @@ class GloveOverlay:
             tw = font.getlength(name) / SS
             ph, bh = fs * .55, fs * 1.7
             w, h = int(math.ceil(tw + ph * 2)), int(math.ceil(bh))
-            fill = (ORANGE if hot else (8, 9, 12)) + (int((235 if hot else 190) * aq / 8),)
+            fill = TAG + (int((235 if hot else 190) * aq / 8),)
 
             def paint(d, s):
                 d.rounded_rectangle((0, 0, w * s - 1, h * s - 1), radius=h * s / 2, fill=fill)

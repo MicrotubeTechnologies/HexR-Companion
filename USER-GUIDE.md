@@ -141,7 +141,7 @@ The space bar does the same.
 For a longer run, turn on **Keep on**: then one press starts it and the next
 stops it. **Release all** vents everything.
 
-The glove on the screen shows what is happening: a point glows orange where the
+The glove on the screen shows what is happening: a point glows white where the
 glove is pressing (from what the glove measures, when it reports it), a
 vibration sends out rings, and the caption under it reads *Press. Hold.
 Release.*, or *Pulse. Buzz.* in vibration mode.
@@ -272,8 +272,9 @@ app is open. The list searches by itself. A headset shows *Asleep* while nobody
 is wearing it, and refuses commands until someone puts it on.
 
 Click a headset (or its **Open**) to open it below the list. The picture comes
-first: the wearer's view, square and whole, with a panel for each glove beside
-it, left hand above right.
+first: the wearer's view, wide, with a panel for each glove beside it, left
+hand above right. The headset sends a square view; the picture shows the wide
+middle of it, keeping its lower part, where hands are.
 
 - **Watch** — the wearer is asked in the headset to allow sharing their view;
   once they do, it appears in the square. Clicking the square does the same.
@@ -336,14 +337,14 @@ video to share.
 
    | Shape | Size | For |
    |---|---|---|
-   | **Landscape** | 1920 × 1080 | YouTube, a TV: the view, the gloves to its right |
-   | **Portrait** | 1080 × 1920 | YouTube Shorts, phones: the view, the gloves under it |
-   | **View only** | the view's own shape | The view alone, no gloves |
+   | **Landscape** | 1920 × 1080 | YouTube, a TV: the view wide, the gloves in the last quarter |
+   | **Portrait** | 1080 × 1920 | YouTube Shorts, phones: the whole view, the gloves under it |
+   | **View only** | the view's own shape | The whole view alone, no gloves |
 
-   A Quest's view is square. A headset whose view is wide still gets these
-   shapes: in landscape the view takes three quarters of the width, with thin
-   bands above and below, and in portrait it runs across the top with more room
-   for the gloves under it.
+   In landscape the view always fills three quarters of the width, top to
+   bottom. A Quest's view is square, so it is cut to that, keeping its lower
+   part, where hands are; a headset whose view is wider is shown whole, with
+   thin bands above and below. In portrait the view runs across the top, whole.
 
 3. **Export.** A minute of recording takes about a minute and a half. **Stop**
    cancels it. The video goes in *Videos\HEXR Companion\Exports*, named after

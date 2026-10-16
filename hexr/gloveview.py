@@ -209,9 +209,10 @@ class GloveView(tk.Canvas):
                     on = ch in self._selected
                     hot = self._hover == (hand, ch)
                     if on or hot:
+                        # White and dark: the glove is orange, so the accent would vanish.
                         self.create_oval(x - r, y - r, x + r, y + r,
-                                         outline=T.ACCENT if on else T.TEXT_MUTED,
-                                         width=2 if on else 1, tags="over")
+                                         outline=T.TEXT if on else T.CANVAS,
+                                         width=2.5 if on else 1.5, tags="over")
                 if self._values and hand in self._values:
                     left = (ch in (2, 3, 4)) != (hand == "left")
                     self.create_text(x - r - 4 if left else x + r + 4, y,

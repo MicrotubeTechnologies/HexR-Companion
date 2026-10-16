@@ -1,11 +1,12 @@
 """What a headset's view turns into: the view beside its gloves.
 
-The view is shown whole, in its own shape (a Quest's is square). Beside it goes a panel for
-each glove. Landscape (16:9) puts the view on the left, as big as leaves the gloves at least a
-quarter of the width, and the gloves to its right; portrait (9:16) puts the view across the top
-and the gloves in the room under it. Those are YouTube's two shapes, whatever the view's. The two
-panels share the gloves' room side by side or one above the other, whichever draws the gloves
-bigger. View only is the view alone, in its own shape. Each panel lights its glove where the
+Beside the view goes a panel for each glove. Landscape (16:9) gives the view three quarters of
+the width at full height, a wide picture: a square view (a Quest's) is cut to it, keeping the
+lower part, where hands are, and a view wider still is shown whole. The gloves have the last
+quarter. Portrait (9:16) puts the view, whole, across the top and the gloves in the room under
+it. Those are YouTube's two shapes, whatever the view's. The two panels share the gloves' room
+side by side or one above the other, whichever draws the gloves bigger. View only is the view
+alone, whole, in its own shape. Each panel lights its glove where the
 wearer is being touched, and says whether the headset has that glove, and its battery. Nothing
 is drawn over the view itself.
 
@@ -32,13 +33,14 @@ LANDSCAPE, PORTRAIT, VIEW = "landscape", "portrait", "view"
 LAYOUTS = (LANDSCAPE, PORTRAIT, VIEW)
 SIZE = {LANDSCAPE: (1920, 1080), PORTRAIT: (1080, 1920), VIEW: (1920, 1080)}   # VIEW: at most
 HANDS = ("left", "right")
-GLOVES_AT_LEAST = .25        # of the picture's long side, for the gloves, however wide the view
+GLOVES_SHARE = .25           # of the picture's long side, for the gloves
+CUT_LOW = .35                # where a view cut to fit is cut: -1 its top, 0 middle, 1 its bottom
 
 # The glove in a panel: the panel is its backdrop and carries its name, and the caption sits
 # under it. A finger firing is named beside it, while one or two are: more, and the names
 # would crowd the glove, which says enough by lighting up. Room either side for the names.
-GLOVE = OverlayLook(backdrop=False, title=False, labels="active", caption=True, margin=.6)
-QUIET = OverlayLook(backdrop=False, title=False, labels="off", caption=True, margin=.6)
+GLOVE = OverlayLook(backdrop=False, title=False, labels="active", caption=True, margin=.25)
+QUIET = OverlayLook(backdrop=False, title=False, labels="off", caption=True, margin=.25)
 NAMED_AT_MOST = 2
 NAMED_FROM_GH = 200          # and only on a glove big enough for the names to be read
 GLOVE_STEP = 4               # the glove's height is kept to steps of this, so its pieces are reused
@@ -113,12 +115,11 @@ def boxes(size: tuple[int, int], layout: str, aspect: float = 1.0) -> Boxes:
         return Boxes((0, 0, w, h), None, None)
     g = max(2, round(min(w, h) * .014))
     if layout == LANDSCAPE:
-        vw = min(round(h * aspect), round(w * (1 - GLOVES_AT_LEAST)) - g)
-        vh = min(h, round(vw / aspect))
-        view = (0, (h - vh) // 2, vw, (h - vh) // 2 + vh)
+        vw = round(w * (1 - GLOVES_SHARE)) - g
+        view = (0, 0, vw, h)
         room = (vw + g, g, w - g, h - g)
     else:
-        vh = min(round(w / aspect), round(h * (1 - GLOVES_AT_LEAST)) - g)
+        vh = min(round(w / aspect), round(h * (1 - GLOVES_SHARE)) - g)
         vw = min(w, round(vh * aspect))
         view = ((w - vw) // 2, 0, (w - vw) // 2 + vw, vh)
         room = (g, vh + g, w - g, h - g)
@@ -244,11 +245,19 @@ class Compositor:
         return self._base[1].copy()
 
     def _paste_view(self, img: Image.Image, frame, box):
-        """The headset's view, whole, as big as fits in its place."""
-        scale = min((box[2] - box[0]) / frame.width, (box[3] - box[1]) / frame.height)
+        """The headset's view in its place: filling it, cut top and bottom, when the view is
+        taller than the place (landscape's wide picture of a square view); otherwise whole."""
+        bw, bh = box[2] - box[0], box[3] - box[1]
+        if frame.width / frame.height < bw / bh - .01:
+            w = bw
+            h = max(bh, round(frame.height * bw / frame.width))
+            view = to_image(frame, w, h)
+            top = round((h - bh) / 2 * (1 + CUT_LOW))
+            img.paste(view.crop((0, top, bw, top + bh)), (box[0], box[1]))
+            return
+        scale = min(bw / frame.width, bh / frame.height)
         w, h = max(2, round(frame.width * scale)), max(2, round(frame.height * scale))
-        img.paste(to_image(frame, w, h),
-                  (box[0] + (box[2] - box[0] - w) // 2, box[1] + (box[3] - box[1] - h) // 2))
+        img.paste(to_image(frame, w, h), (box[0] + (bw - w) // 2, box[1] + (bh - h) // 2))
 
     def _panel(self, img, cell, hand: str, st: HandState, badge: GloveBadge, gh: int):
         x0, y0, x1, y1 = cell

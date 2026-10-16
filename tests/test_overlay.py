@@ -114,10 +114,14 @@ def test_each_shape_is_youtubes_and_fits_where_it_is_put():
 
 
 @pytest.mark.parametrize("layout", [V.LANDSCAPE, V.PORTRAIT])
-def test_the_view_is_square_and_the_gloves_sit_beside_it_left_first(layout):
+def test_the_view_comes_first_and_the_gloves_sit_beside_it_left_first(layout):
     w, h = V.SIZE[layout]
     b = V.boxes((w, h), layout)
-    assert b.view == (0, 0, min(w, h), min(w, h))
+    if layout == V.LANDSCAPE:          # wide and full height; the gloves a quarter
+        assert b.view[:2] == (0, 0) and b.view[3] == h
+        assert w - b.view[2] == pytest.approx(w * V.GLOVES_SHARE, abs=20)   # and a gap
+    else:                              # a square view across the top, whole
+        assert b.view == (0, 0, w, w)
     for cell in (b.left, b.right):
         assert 0 <= cell[0] < cell[2] <= w and 0 <= cell[1] < cell[3] <= h
     if layout == V.LANDSCAPE:
@@ -130,17 +134,28 @@ def test_the_view_is_square_and_the_gloves_sit_beside_it_left_first(layout):
     assert V.boxes((1080, 1080), V.VIEW).left is None
 
 
+def test_a_square_view_is_cut_wide_keeping_its_lower_part():
+    av = pytest.importorskip("av")
+    tall = Image.new("RGB", (512, 512), (200, 0, 0))
+    tall.paste((0, 0, 200), (0, 0, 512, 64))            # its top eighth, blue
+    tall.paste((0, 200, 0), (0, 420, 512, 460))         # low in it, where hands are: green
+    img = V.Compositor().draw(av.VideoFrame.from_image(tall), {}, (), V.LANDSCAPE)
+    b = V.boxes(img.size, V.LANDSCAPE)
+    top = img.getpixel((100, 2))
+    assert top[0] > 150 and top[2] < 60                  # the blue top is cut away
+    column = [img.getpixel((100, y)) for y in range(b.view[1], b.view[3], 4)]
+    assert any(g > 150 and r < 60 for r, g, _b in column)   # the low part is kept
+    # More is cut from the top than the bottom: the green sits in the view's lower fifth.
+    first = next(i for i, (r, g, _b) in enumerate(column) if g > 150 and r < 60)
+    assert first * 4 > (b.view[3] - b.view[1]) * .7
+
+
 def test_a_landscape_view_still_makes_youtubes_shapes():
     wide = 16 / 9
-    b = V.boxes((1920, 1080), V.LANDSCAPE, wide)
-    vw, vh = b.view[2] - b.view[0], b.view[3] - b.view[1]
-    assert vw / vh == pytest.approx(wide, abs=.01)
-    assert 1920 - b.view[2] >= 1920 * V.GLOVES_AT_LEAST                 # room for the gloves
-    assert b.view[1] == pytest.approx(1080 - b.view[3], abs=1)          # centred top to bottom
     p = V.boxes((1080, 1920), V.PORTRAIT, wide)
     assert p.view[:3] == (0, 0, 1080) and p.view[3] == pytest.approx(608, abs=1)  # across the top
-    assert p.left[1] >= p.view[3] and p.left[3] <= p.right[1]           # stacked under it
-    assert V.glove_height(p.left) > V.glove_height(V.boxes((1080, 1920), V.PORTRAIT).left)
+    assert p.left[1] >= p.view[3] and p.right[1] >= p.view[3]           # both under it
+    assert V.glove_height(p.left) >= V.glove_height(V.boxes((1080, 1920), V.PORTRAIT).left)
 
 
 def test_the_panels_light_the_finger_that_is_firing_and_dim_a_glove_not_connected():
@@ -152,10 +167,9 @@ def test_the_panels_light_the_finger_that_is_firing_and_dim_a_glove_not_connecte
     b = V.boxes(img.size, V.LANDSCAPE)
     assert img.getpixel((200, 200)) == pytest.approx((30, 60, 90), abs=3)   # the view, untouched
 
-    def orange(box):
+    def orange(box):      # glowing: white-hot on the orange glove
         raw = img.crop(box).convert("RGB").tobytes()
-        return sum(1 for i in range(0, len(raw), 3)
-                   if raw[i] > 200 and 60 < raw[i + 1] < 160 and raw[i + 2] < 90)
+        return _white_hot(zip(raw[0::3], raw[1::3], raw[2::3]))
 
     def brightness(box):
         crop = img.crop(box).convert("L")
@@ -167,18 +181,26 @@ def test_the_panels_light_the_finger_that_is_firing_and_dim_a_glove_not_connecte
 
 # -- drawing ---------------------------------------------------------------------------------
 
+def _white_hot(pixels) -> int:
+    """How many pixels glow as a firing touch point does on the orange glove."""
+    return sum(1 for r, g, b in pixels if r > 235 and g > 215 and b > 170)
+
+
 def test_the_glove_lights_the_finger_that_is_firing():
-    img = Image.new("RGB", (1024, 576), (20, 20, 20))
+    from hexr.overlay import touch_points
+    look = OverlayLook()
+    gh = 300
     lit = HP.HandState(levels=[0, 1.0, 0, 0, 0, 0])
     lit.words, lit.word = 0, 1
-    GloveOverlay().draw(img, ["right"], {"right": lit}, OverlayLook())
-    # The index fingertip is the glove's highest touch point, so the brightest orange there.
-    gh = round(0.32 * 576)
-    w = int(gh * 520 / 885)
-    px = img.width - int(min(img.size) * .03) - int(w + w * .46 * 2) + int(w * .46 + .5 * w)
-    py = img.height - int(min(img.size) * .03) - int(gh * .12 + gh + gh * .24) + int(gh * .1 + .0758 * gh)
-    near = [img.getpixel((px + dx, py + dy)) for dx in range(-14, 15, 2) for dy in range(-14, 15, 2)]
-    assert any(r > 200 and 60 < g < 160 and b < 90 for r, g, b in near)
+    panel = GloveOverlay().panel("right", gh, look, lit).convert("RGB")
+    dark = GloveOverlay().panel("right", gh, look, HP.HandState()).convert("RGB")
+
+    def near(img, ch):
+        x, y = touch_points("right", gh, look)[ch]
+        return [img.getpixel((int(x) + dx, int(y) + dy))
+                for dx in range(-16, 17, 2) for dy in range(-16, 17, 2)]
+    assert _white_hot(near(panel, 1)) > _white_hot(near(dark, 1)) + 10      # the index glows
+    assert _white_hot(near(panel, 4)) == _white_hot(near(dark, 4))         # the pinky does not
 
 
 @pytest.mark.parametrize("corner", ["tl", "tr", "bl", "br"])

@@ -20,8 +20,8 @@ from hexr import gloveview as GV  # noqa: E402
 from hexr import settings  # noqa: E402
 from hexr import theme as T  # noqa: E402
 from hexr.haptics import PRESS_S, HandState  # noqa: E402
-from hexr.overlay import (GLOVE_ASPECT, GloveOverlay, OverlayLook, nearest_point,  # noqa: E402
-                          panel_size, touch_points)
+from hexr.overlay import (DOTS, GLOVE_ASPECT, GloveOverlay, OverlayLook,  # noqa: E402
+                          nearest_point, panel_size, touch_points)
 from hexr.screens import base  # noqa: E402
 from hexr.screens.quicktest import judge  # noqa: E402
 
@@ -39,10 +39,11 @@ def test_the_left_hand_is_the_right_hand_mirrored():
         assert 0 < rx < w
 
 
-def test_the_headset_overlay_keeps_its_old_margin():
+def test_a_touch_point_sits_where_the_art_says_beside_the_margin():
     gw = 300 * GLOVE_ASPECT
+    x, y, _left = DOTS[1]
     index = touch_points("right", 300, OverlayLook())[1]
-    assert index == pytest.approx((gw * .46 + .5 * gw, 300 * .1 + .0758 * 300))
+    assert index == pytest.approx((gw * .46 + x * gw, 300 * .1 + y * 300))
 
 
 # -- what a click hits ------------------------------------------------------------------------------
