@@ -292,3 +292,47 @@ if __name__ == "__main__":
     print(f"\n{'FAILED' if failures else 'All remote tests passed'}"
           f"{f' ({failures} failing)' if failures else ''}")
     sys.exit(1 if failures else 0)
+
+
+# -- haptics (HexR 0.10.2 and later) ---------------------------------------------
+
+# The package's RemoteTests.cs: the right index fingertip starting to press at 80%.
+REFERENCE_HAPTICS = (
+    '{"type":"haptics","t":1791966541289123,"hand":"right","channels":['
+    '{"finger":1,"mode":"pressure","intensityPct":80,"frequencyDeciHz":0,"tap":false}]}'
+)
+
+
+def test_reads_the_reference_haptics_line():
+    u = R.parse_haptics(R.parse_json(REFERENCE_HAPTICS))
+    assert (u.hand, u.t_us) == ("right", 1791966541289123)
+    assert u.channels == [R.HapticChannel(finger=1, mode="pressure", intensity=0.8, hz=0.0,
+                                          tap=False)]
+
+
+def test_reads_a_vibration_tap_and_skips_what_it_cannot_use():
+    u = R.parse_haptics({"hand": "left", "t": 5, "channels": [
+        {"finger": 5, "mode": "vibration", "intensityPct": 50, "frequencyDeciHz": 60, "tap": True},
+        {"finger": 9, "mode": "pressure"}, {"finger": 2, "mode": "squeeze"}, "junk"]})
+    assert u.channels == [R.HapticChannel(5, "vibration", 0.5, 6.0, True)]
+    assert R.parse_haptics({"hand": "middle", "channels": []}) is None
+
+
+def test_status_says_whether_the_headset_sends_haptics_and_its_clock():
+    newer = R.parse_status(R.parse_json(REFERENCE_STATUS[:-1] +
+                                        ',"haptics":true,"clockUs":1791966541289123}'))
+    assert (newer.haptics, newer.clock_us) == (True, 1791966541289123)
+    older = R.parse_status(R.parse_json(REFERENCE_STATUS))
+    assert (older.haptics, older.clock_us) == (False, 0)
+
+
+def test_a_link_hands_haptics_lines_to_its_listener():
+    got = []
+
+    class Listener:
+        def on_haptics(self, key, update):
+            got.append((key, update.hand))
+
+    link = R.HeadsetLink("q3-1", "127.0.0.1", 1, Listener())
+    link._handle(REFERENCE_HAPTICS.encode())
+    assert got == [("q3-1", "right")]

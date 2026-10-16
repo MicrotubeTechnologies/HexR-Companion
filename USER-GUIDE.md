@@ -252,6 +252,24 @@ Press **Open** on a headset to see its gloves, its scene and its view.
 - **Watch** — the wearer is asked in the headset to allow sharing their view;
   once they do, it appears here. **Stop watching** leaves the view running for
   anyone else still watching it.
+- **The glove on the view** — a HEXR glove in the corner of the picture lights
+  up where the wearer is being touched: pressure glows and holds, a vibration
+  sends out rings, and a caption reads *Press. Hold. Release.* or *Pulse. Buzz.
+  Click.*, so an audience can see what the haptics are doing. Turn it off with
+  **Glove**, or change its **Size**. Apps built with **HexR 0.10.2 or newer**
+  send every touch and vibration as it happens, lined up with the picture; with
+  an older app the glove follows the pressure the gloves measure, which shows a
+  press or a hold but not a vibration.
+- **Frame** — the headset sends a square view. **16:9** cuts a widescreen band
+  from it for a TV or a video; drag the picture up or down to choose which band
+  (hands are usually low in the view). **Square** shows all of it.
+- **Record** — saves the view as you see it, glove included, as an MP4 in
+  *Videos\HEXR Companion*. **Show in folder** opens it. With a HexR 0.10.2 app a
+  *.haptics.json* is saved beside it, which HexR Overlay Studio opens to restyle
+  the glove afterwards.
+- **Full screen** — the view alone, on a second display if one is connected (a
+  projector or TV), or on this one. **Esc** leaves, **R** records, **G** turns
+  the glove on or off, and dragging or the arrow keys move a 16:9 frame.
 - **Name** — call a headset *Station 1* or similar. Headsets of one model all
   report the same name, so this is how you tell them apart. The name is kept on
   this computer.

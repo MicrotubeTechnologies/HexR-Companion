@@ -11,28 +11,39 @@ The same thing as the phone's Headsets tab, over the same protocol (see hexr/rem
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import time
 import tkinter as tk
 
+from .. import recorder as REC
 from .. import remote as R
+from .. import settings
 from .. import theme as T
+from ..haptics import HapticsTimeline
 from ..headsets import Headsets, HeadsetRow
 from ..i18n import N_, tr
+from ..overlay import OverlayLook
+from ..viewer import Compositor, ViewLook
 from ..widgets import Button, Divider, Dot, Panel, Select, Surface
 from .base import Screen, section_label
+from .fullview import PUMP_MS, FullView
 
 # headset | app · scene | gloves | state | action
 COLS = (None, 260, 120, 110, 100)
 
-VIEW_W = 480
+VIEW_MIN, VIEW_MAX = 480, 1024   # the view's width: grows with the window, to the headset's own
+GLOVE_SIZES = ((N_("Small"), 0.26), (N_("Medium"), 0.32), (N_("Large"), 0.40))
+DOTS_EVERY = 8             # ticks per step of the searching dots: 20 Hz / 8 = 0.4 s
+VIEW_FILE = "view.json"
 COMMANDS_W = 900          # the content column, less a margin
 LIST_EVERY = 4            # ticks between list refreshes: 20 Hz / 4 = 5 Hz, what a headset sends
 
 
 class HeadsetsScreen(Screen):
     title_text = N_("Headsets")
-    sub_text = N_("Every HEXR headset on this network. Connect its gloves, change its scene and "
-                  "watch what the wearer sees, without taking the headset off them.")
+    sub_text = N_("Ensure the headset and this device are on the same Wi-Fi network.")
 
     def __init__(self, parent, app):
         super().__init__(parent, app)
@@ -59,15 +70,11 @@ class HeadsetsScreen(Screen):
         self.results = Surface(self.body)
         self.results.pack(fill="x", pady=(18, 0))
         self._build_header()
-        self.empty = tk.Label(
-            self.results, bg=T.RAISED, fg=T.TEXT_MUTED, font=T.font(12.5), justify="left",
-            anchor="w", wraplength=820,
-            text=tr("No headsets yet. Each one needs a HEXR app with HexR Remote running, on "
-                    "the same network as this computer. If one is running and still does not "
-                    "appear, Windows may be blocking it: allow HEXR Companion on private networks "
-                    "in Windows Security, make sure this network is set to Private, or type the "
-                    "headset's address above."))
+        self.empty = tk.Label(self.results, bg=T.RAISED, fg=T.TEXT_MUTED, font=T.font(12.5),
+                              justify="left", anchor="w",
+                              text=tr("No headset found, auto searching") + "\u2007" * 3)
         self.empty.pack(fill="x", padx=18, pady=18)
+        self._dots = 0
 
         self.detail_host = tk.Frame(self.body, bg=T.SURFACE)
         self.detail_host.pack(fill="x", pady=(22, 0))
@@ -172,6 +179,11 @@ class HeadsetsScreen(Screen):
         self._ticks += 1
         if self._ticks % LIST_EVERY == 0:
             self._refresh()
+        if self._ticks % DOTS_EVERY == 0 and self.empty.winfo_ismapped():
+            self._dots = (self._dots + 1) % 4
+            # The dots keep a fixed width, so the words do not shuffle as they count up.
+            self.empty.configure(text=tr("No headset found, auto searching") +
+                                 "." * self._dots + " " * (3 - self._dots))
         if self._detail:
             self._detail.pump_video()
 
@@ -277,22 +289,76 @@ class _Detail(tk.Frame):
         self.recenter_status.pack(side="left", padx=(14, 0))
         self._recentered_at = 0.0
 
-        # -- view
+        # -- view: the wearer's view, with the glove drawn over it as it fires
         section_label(self, tr("View")).pack(fill="x", pady=(18, 8))
         vbar = tk.Frame(self, bg=T.SURFACE)
         vbar.pack(fill="x")
         self.view_btn = Button(vbar, tr("Watch"), command=self._toggle_view, glyph="▶",
                                min_width=150)
         self.view_btn.pack(side="left")
+        self.rec_btn = Button(vbar, tr("Record"), command=self._toggle_record, glyph="●",
+                              fill=T.INSET, fg=T.TEXT, border=T.BORDER, hover_fill=T.INSET,
+                              hover_fg=T.DANGER, hover_border=T.DANGER, min_width=120)
+        self.rec_btn.pack(side="left", padx=(10, 0))
+        self.full_btn = Button(vbar, tr("Full screen"), command=self._open_full, fill=T.INSET,
+                               fg=T.TEXT, border=T.BORDER, hover_fill=T.ACCENT,
+                               hover_fg=T.CANVAS, hover_border=T.ACCENT, min_width=120)
+        self.full_btn.pack(side="left", padx=(10, 0))
         self.view_status = tk.Label(vbar, text="", bg=T.SURFACE, fg=T.TEXT_MUTED,
                                     font=T.font(12.5), anchor="w", justify="left",
-                                    wraplength=640)
+                                    wraplength=400)
         self.view_status.pack(side="left", padx=(14, 0))
-        self.screen = tk.Label(self, bg=T.CANVAS, bd=0)
+
+        self.look = _load_look()
+        opts = tk.Frame(self, bg=T.SURFACE)
+        opts.pack(fill="x", pady=(10, 0))
+        self.frame_select = Select(opts, ["16:9", tr("Square")], label=tr("Frame"),
+                                   value="16:9" if self.look.landscape else tr("Square"),
+                                   command=lambda v: self._set_look(landscape=v == "16:9"))
+        self.frame_select.pack(side="left")
+        self.glove_select = Select(opts, [tr("On"), tr("Off")], label=tr("Glove"),
+                                   value=tr("On") if self.look.overlay else tr("Off"),
+                                   command=lambda v: self._set_look(overlay=v == tr("On")))
+        self.glove_select.pack(side="left", padx=(10, 0))
+        sizes = [tr(name) for name, _ in GLOVE_SIZES]
+        current = min(GLOVE_SIZES, key=lambda x: abs(x[1] - self.look.glove.size))[0]
+        self.size_select = Select(opts, sizes, label=tr("Size"), value=tr(current),
+                                  command=self._size_picked)
+        self.size_select.pack(side="left", padx=(10, 0))
+        self.frame_hint = tk.Label(opts, text=tr("Drag the picture up or down to frame it."),
+                                   bg=T.SURFACE, fg=T.TEXT_FAINT, font=T.font(12))
+        self.frame_hint.pack(side="left", padx=(14, 0))
+
+        self.screen = tk.Label(self, bg=T.CANVAS, bd=0, cursor="fleur")
         self.screen.pack(anchor="w", pady=(12, 0))
+        self.screen.bind("<ButtonPress-1>", lambda e: self._drag_frame("start", e.y))
+        self.screen.bind("<B1-Motion>", lambda e: self._drag_frame("move", e.y))
+        self.screen.bind("<ButtonRelease-1>", lambda e: self._drag_frame("end", e.y))
+        self.screen.bind("<Double-Button-1>", lambda e: self._open_full())
+        self.view_note = tk.Label(self, text="", bg=T.SURFACE, fg=T.TEXT_FAINT,
+                                  font=T.font(12), anchor="w", justify="left", wraplength=720)
+        self.view_note.pack(fill="x", pady=(6, 0))
+        recbar = tk.Frame(self, bg=T.SURFACE)
+        recbar.pack(fill="x", pady=(4, 0))
+        self.rec_status = tk.Label(recbar, text="", bg=T.SURFACE, fg=T.TEXT_MUTED,
+                                   font=T.font(12.5), anchor="w", justify="left", wraplength=560)
+        self.rec_status.pack(side="left")
+        self.show_btn = Button(recbar, tr("Show in folder"), command=self._show_recording,
+                               height=30, fill=T.INSET, fg=T.TEXT, border=T.BORDER,
+                               hover_fill=T.ACCENT, hover_fg=T.CANVAS, hover_border=T.ACCENT)
+
         self._view_wanted = False
         self._last_stream = R.StreamState()
         self._unavailable = R.video_available()
+        self._title = ""
+        self.timeline = model.haptics(key) or HapticsTimeline()
+        self.compositor = Compositor(self.timeline, self.look)
+        self._fit = self._inline_fit()
+        self.full: FullView | None = None
+        self.recorder: REC.Recorder | None = None
+        self._saving: REC.Recorder | None = None
+        self._saved: REC.Recorder | None = None
+        self._drag: tuple[int, float] | None = None
 
     def _glove_card(self, parent, hand: str):
         card = Panel(parent, bg=T.RAISED, pad=16)
@@ -326,6 +392,7 @@ class _Detail(tk.Frame):
 
     def update(self, r: HeadsetRow):
         s = r.status
+        self._title = r.title
         self.title.configure(text=r.title)
         if self._nick_shown != r.nickname and self.focus_get() is not self.nick:
             self.nick.delete(0, "end")
@@ -514,11 +581,10 @@ class _Detail(tk.Frame):
 
         live = st.state == "live" and st.port > 0
         if live and self._view_wanted and self.video is None:
-            w = VIEW_W
-            h = int(VIEW_W * st.height / st.width) // 2 * 2 if st.width else VIEW_W
-            self.video = R.VideoReceiver(r.host, st.port, (w, h))
+            self.video = R.VideoReceiver(r.host, st.port, self._render)
         if not live and self.video is not None and st.state != "requesting":
             self._stop_video()
+        self._update_recording()
         if self._view_wanted or self.video:
             self.view_btn.set(text=tr("Stop watching"), glyph="■", disabled=False,
                               fill=T.INSET, fg=T.DANGER, border=T.DANGER,
@@ -551,19 +617,201 @@ class _Detail(tk.Frame):
         if st.state == "denied" and self._view_wanted:
             self._view_wanted = False
 
+        playing = bool(self.video and self.video.state == "playing")
+        if not self.full:
+            self._fit = self._inline_fit()
+        if self.full_btn.disabled == playing:
+            self.full_btn.set(disabled=not playing)
+        if self.look.landscape and not self.frame_hint.winfo_ismapped():
+            self.frame_hint.pack(side="left", padx=(14, 0))
+        elif not self.look.landscape and self.frame_hint.winfo_ismapped():
+            self.frame_hint.pack_forget()
+        note = ""
+        if self.video and self.video.render_error:
+            note = tr("The glove could not be drawn: {error}", error=self.video.render_error)
+        elif playing and self.look.overlay and not self.timeline.exact:
+            note = tr("The glove shows the pressure the gloves measure. Update this app to HexR "
+                      "0.10.2 or newer to show every touch and vibration as it is sent.")
+        self.view_note.configure(text=note)
+
+    # -- drawing the view ---------------------------------------------------------
+
+    def _render(self, frame, pts_us: int, arrived: float):
+        """The video thread: one frame as it is shown, framed and with the glove on top."""
+        return self.compositor.compose(frame, pts_us, arrived, self._fit)
+
+    def _inline_fit(self) -> tuple[int, int]:
+        """The view's size in the window: as wide as the column, but never so tall that the
+        controls above it scroll away."""
+        room = self.winfo_width() - 8 if self.winfo_ismapped() else VIEW_MIN
+        tall = max(270, int(self.winfo_toplevel().winfo_height() * 0.42))
+        if self.look.landscape:
+            w = int(max(VIEW_MIN, min(room, VIEW_MAX, tall * 16 / 9)))
+            return w, w * 9 // 16
+        side = int(max(360, min(room, tall, 720)))
+        return side, side
+
     def pump_video(self):
-        if not self.video:
+        if not self.video or self.full:
             return
-        frame = self.video.latest()
-        if frame is None:
+        image = self.video.latest()
+        if image is None:
+            return
+        from PIL import ImageTk
+        if self._photo is None or (self._photo.width(), self._photo.height()) != image.size:
+            self._photo = ImageTk.PhotoImage(image, master=self)
+            self.screen.configure(image=self._photo)
+        else:
+            self._photo.paste(image)
+
+    def _set_look(self, save: bool = True, **changes):
+        if self.recorder and changes.get("landscape", self.look.landscape) != self.look.landscape:
+            # A recording keeps the frame it started with: its size cannot change.
+            self.frame_select.set(value="16:9" if self.look.landscape else tr("Square"))
+            return
+        self.look = self.look.but(**changes)
+        self.compositor.look = self.look
+        self._fit = self.full.size if self.full else self._inline_fit()
+        if save:
+            _save_look(self.look)
+
+    def _size_picked(self, value: str):
+        size = next((v for name, v in GLOVE_SIZES if tr(name) == value), 0.32)
+        self._set_look(glove=OverlayLook(**{**self.look.glove.__dict__, "size": size}))
+
+    def _toggle_glove(self):
+        on = not self.look.overlay
+        self.glove_select.set(value=tr("On") if on else tr("Off"))
+        self._set_look(overlay=on)
+
+    def _drag_frame(self, phase: str, y: int, host=None):
+        """Drag the 16:9 frame up or down the square view it is cut from."""
+        if not self.look.landscape:
+            return
+        if phase == "start":
+            self._drag = (y, self.look.offset)
+        elif phase == "move" and self._drag:
+            shown = host.picture_height() if host else (self._photo.height() if self._photo else 0)
+            travel = shown * (16 / 9 - 1) / 2       # the spare height of the square, either side
+            if travel > 0:
+                y0, start = self._drag
+                self._set_look(save=False, offset=max(-1.0, min(1.0, start - (y - y0) / travel)))
+        elif phase == "end" and self._drag:
+            self._drag = None
+            _save_look(self.look)
+
+    def _nudge(self, step: float):
+        if self.look.landscape:
+            self._set_look(offset=max(-1.0, min(1.0, self.look.offset + step)))
+
+    # -- full screen ------------------------------------------------------------------
+
+    def _open_full(self):
+        if self.full or not (self.video and self.video.state == "playing"):
+            return
+        self.full = FullView(self, on_close=self._full_closed, on_record=self._toggle_record,
+                             on_glove=self._toggle_glove, on_nudge=self._nudge,
+                             on_drag=self._drag_frame)
+        self._fit = self.full.size
+        self._pump_full()
+
+    def _full_closed(self):
+        self.full = None
+        self._fit = self._inline_fit()
+
+    def _pump_full(self):
+        if not self.full:
+            return
+        if self.video:
+            image = self.video.latest()
+            if image is not None:
+                self.full.show(image)
+        rec = self.recorder
+        self.full.set_recording(tr("REC {time}", time=_clock(rec.seconds)) if rec else "")
+        try:
+            self.after(PUMP_MS, self._pump_full)
+        except tk.TclError:
+            pass
+
+    # -- recording --------------------------------------------------------------------
+
+    def _toggle_record(self):
+        if self.recorder:
+            self._stop_record()
+            return
+        if not (self.video and self.video.state == "playing"):
             return
         try:
-            self._photo = tk.PhotoImage(master=self, data=frame, format="PPM")
-        except tk.TclError:
+            path = REC.recording_path(self._title or "Headset")
+        except OSError as e:
+            self.rec_status.configure(text=tr("Recording failed: {error}", error=e), fg=T.DANGER)
             return
-        self.screen.configure(image=self._photo)
+        rec = REC.Recorder(path, self.timeline, lambda: self.look)
+        self.recorder = rec
+        self._saved = None
+        self.show_btn.pack_forget()
+        rec.start()
+        self.video.taps.append(rec.tap)
+        self._update_recording()
+
+    def _stop_record(self):
+        rec, self.recorder = self.recorder, None
+        if rec is None:
+            return
+        if self.video and rec.tap in self.video.taps:
+            self.video.taps.remove(rec.tap)
+        rec.stop()
+        self._saving = rec
+        self._update_recording()
+
+    def _update_recording(self):
+        rec = self.recorder
+        if self._saving and self._saving.done:
+            self._saved, self._saving = self._saving, None
+        if rec:
+            self.rec_btn.set(text=tr("Stop recording"), glyph="■", disabled=False, fill=T.INSET,
+                             fg=T.DANGER, border=T.DANGER, hover_fg=T.DANGER,
+                             hover_border=T.DANGER)
+            self.rec_status.configure(text="● " + tr("Recording {time}", time=_clock(rec.seconds)),
+                                      fg=T.DANGER)
+            return
+        playing = bool(self.video and self.video.state == "playing")
+        self.rec_btn.set(text=tr("Record"), glyph="●", disabled=not playing or bool(self._saving),
+                         fill=T.INSET, fg=T.TEXT, border=T.BORDER, hover_fg=T.DANGER,
+                         hover_border=T.DANGER)
+        if self._saving:
+            self.rec_status.configure(text=tr("Saving the recording…"), fg=T.TEXT_MUTED)
+        elif self._saved and self._saved.error:
+            self.rec_status.configure(text=tr("Recording failed: {error}", error=self._saved.error),
+                                      fg=T.DANGER)
+        elif self._saved:
+            text = tr("Saved {name}", name=os.path.basename(self._saved.path))
+            if self._saved.dropped:
+                text += tr(" · {n} frames dropped", n=self._saved.dropped)
+            self.rec_status.configure(text=text, fg=T.SUCCESS)
+            if not self.show_btn.winfo_ismapped():
+                self.show_btn.pack(side="left", padx=(12, 0))
+        else:
+            self.rec_status.configure(text="")
+
+    def _show_recording(self):
+        if not self._saved:
+            return
+        path = os.path.normpath(self._saved.path)
+        try:
+            if sys.platform == "win32":
+                subprocess.Popen(["explorer", "/select,", path])
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", "-R", path])
+            else:
+                subprocess.Popen(["xdg-open", os.path.dirname(path)])
+        except OSError:
+            pass
 
     def _stop_video(self):
+        self._stop_record()
+        if self.full:
+            self.full.close()
         if self.video:
             self.video.stop()
             self.video = None
@@ -576,6 +824,28 @@ class _Detail(tk.Frame):
 
 
 # -- helpers -------------------------------------------------------------------------
+
+def _clock(seconds: float) -> str:
+    seconds = int(seconds)
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def _load_look() -> ViewLook:
+    """How the view was last set up: its frame, the glove on or off, and the glove's size."""
+    try:
+        data = settings.load(VIEW_FILE)
+        return ViewLook(landscape=bool(data.get("landscape", True)),
+                        offset=float(data.get("offset", ViewLook.offset)),
+                        overlay=bool(data.get("overlay", True)),
+                        glove=OverlayLook(size=float(data.get("gloveSize", 0.32))))
+    except (AttributeError, TypeError, ValueError):
+        return ViewLook()
+
+
+def _save_look(look: ViewLook):
+    settings.save(VIEW_FILE, {"landscape": look.landscape, "offset": round(look.offset, 3),
+                              "overlay": look.overlay, "gloveSize": look.glove.size})
+
 
 def _entry(parent, width: int) -> tk.Entry:
     return tk.Entry(parent, width=width, bg=T.INSET, fg=T.TEXT, insertbackground=T.TEXT,

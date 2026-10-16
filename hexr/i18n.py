@@ -209,19 +209,11 @@ ZH: dict[str, str] = {
     "Source reached {kpa} kPa.": "气源达到 {kpa} kPa。",
 
     # -- headsets
-    "Every HEXR headset on this network. Connect its gloves, change its scene and watch what "
-    "the wearer sees, without taking the headset off them.":
-        "此网络上的所有 HEXR 头显。无需让佩戴者摘下头显，就能连接其手套、切换场景，"
-        "并观看佩戴者看到的画面。",
+    "Ensure the headset and this device are on the same Wi-Fi network.":
+        "请确保头显和本设备连接在同一个 Wi-Fi 网络。",
     "Add": "添加",
     "Headset address": "头显地址",
-    "No headsets yet. Each one needs a HEXR app with HexR Remote running, on the same network "
-    "as this computer. If one is running and still does not appear, Windows may be blocking it: "
-    "allow HEXR Companion on private networks in Windows Security, make sure this network is set "
-    "to Private, or type the headset's address above.":
-        "还没有头显。每台头显都需要运行带有 HexR Remote 的 HEXR 应用，并与这台电脑处于同一网络。"
-        "如果应用已在运行却仍未出现，可能是 Windows 阻止了它：请在 Windows 安全中心允许 "
-        "HEXR Companion 访问专用网络，确认此网络已设为“专用”，或在上方输入头显的地址。",
+    "No headset found, auto searching": "未找到头显，正在自动搜索",
     "Headset": "头显",
     "App · scene": "应用 · 场景",
     "State": "状态",
@@ -274,6 +266,35 @@ ZH: dict[str, str] = {
     "This headset cannot share its view.": "此头显无法共享画面。",
     "Sharing failed.": "共享失败。",
     "Connecting to the view…": "正在连接画面…",
+    "Record": "录制",
+    "Stop recording": "停止录制",
+    "Full screen": "全屏",
+    "Frame": "画幅",
+    "Square": "方形",
+    "Glove": "手套",
+    "On": "开",
+    "Off": "关",
+    "Size": "大小",
+    "Small": "小",
+    "Medium": "中",
+    "Large": "大",
+    "Drag the picture up or down to frame it.": "上下拖动画面即可调整取景。",
+    "Show in folder": "在文件夹中显示",
+    "The glove could not be drawn: {error}": "无法绘制手套：{error}",
+    "The glove shows the pressure the gloves measure. Update this app to HexR 0.10.2 or newer to "
+    "show every touch and vibration as it is sent.":
+        "手套显示的是手套测得的压力。将此应用更新到 HexR 0.10.2 或更高版本，"
+        "即可实时显示每一次触碰和振动。",
+    "REC {time}": "录制 {time}",
+    "Recording {time}": "正在录制 {time}",
+    "Saving the recording…": "正在保存录制…",
+    "Saved {name}": "已保存 {name}",
+    " · {n} frames dropped": " · 丢失 {n} 帧",
+    "Recording failed: {error}": "录制失败：{error}",
+    "No frames arrived while recording.": "录制期间没有收到画面。",
+    "This build has no video encoder.": "此版本没有视频编码器。",
+    "Esc to leave full screen · R to record · G for the glove · drag to frame":
+        "Esc 退出全屏 · R 录制 · G 显示或隐藏手套 · 拖动调整取景",
     "Cannot listen for headsets on UDP {port}: {error}": "无法在 UDP {port} 端口上搜索头显：{error}",
     "This build cannot show a headset's view: it was made without PyAV.":
         "此版本无法显示头显画面：构建时没有包含 PyAV。",

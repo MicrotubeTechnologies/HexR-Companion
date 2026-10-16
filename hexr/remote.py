@@ -146,6 +146,25 @@ class Status:
     expose_scenes: bool
     allow_recenter: bool
     controllers: int
+    haptics: bool = False          # the headset sends "haptics" lines (HexR 0.10.2 and later)
+    clock_us: int = 0              # its clock when it sent this: the one haptics and video use
+
+
+@dataclass
+class HapticChannel:
+    finger: int                    # 0 thumb … 4 pinky, 5 palm
+    mode: str                      # off | pressure | vibration | pulse
+    intensity: float = 0.0         # 0.1–1 while on
+    hz: float = 0.0                # vibration and pulse frequency
+    tap: bool = False              # on and off again within one headset frame
+
+
+@dataclass
+class HapticsUpdate:
+    """What one glove's haptic channels started doing at `t_us`, on the headset's clock."""
+    hand: str
+    t_us: int
+    channels: list[HapticChannel]
 
 
 def parse_json(text: str) -> dict | None:
@@ -220,7 +239,34 @@ def parse_status(obj: dict) -> Status:
         # Missing before HexR 0.11.0, which does not know the request either.
         allow_recenter=bool(obj.get("allowRecenter", False)),
         controllers=_int(obj.get("controllers"), 0),
+        haptics=bool(obj.get("haptics", False)),
+        clock_us=_int(obj.get("clockUs"), 0),
     )
+
+
+HAPTIC_MODES = ("off", "pressure", "vibration", "pulse")
+
+
+def parse_haptics(obj: dict) -> HapticsUpdate | None:
+    """A "haptics" line, or None if it is not a usable one."""
+    if obj.get("hand") not in HANDS:
+        return None
+    channels = []
+    for c in obj.get("channels") or []:
+        if not isinstance(c, dict):
+            continue
+        finger = _int(c.get("finger"), -1)
+        mode = c.get("mode")
+        if not 0 <= finger <= 5 or mode not in HAPTIC_MODES:
+            continue
+        channels.append(HapticChannel(
+            finger=finger,
+            mode=mode,
+            intensity=max(0, min(100, _int(c.get("intensityPct"), 0))) / 100,
+            hz=max(0, _int(c.get("frequencyDeciHz"), 0)) / 10,
+            tap=c.get("tap") is True,
+        ))
+    return HapticsUpdate(hand=obj["hand"], t_us=_int(obj.get("t"), 0), channels=channels)
 
 
 def _int(value, default: int) -> int:
@@ -323,7 +369,8 @@ class HeadsetLink:
     It keeps itself connected: a link that goes quiet for SILENT_AFTER_S is dropped and
     reopened, with a growing pause, until stop(). The listener gets
     `on_link(key, state)` with "connecting", "connected" or "lost",
-    `on_status(key, status)` and `on_error(key, request, message)`.
+    `on_status(key, status)`, `on_error(key, request, message)`, and, if it has one,
+    `on_haptics(key, update)` for each haptics line.
     """
 
     def __init__(self, key: str, host: str, port: int, listener):
@@ -445,6 +492,10 @@ class HeadsetLink:
         elif kind == "error":
             self._listener.on_error(self.key, str(obj.get("request", "")),
                                     str(obj.get("message", "")))
+        elif kind == "haptics" and hasattr(self._listener, "on_haptics"):
+            update = parse_haptics(obj)
+            if update:
+                self._listener.on_haptics(self.key, update)
 
     def _wait(self, gen: int, seconds: float) -> bool:
         """Sleep, but wake early if stopped. True if this loop should end."""
@@ -488,32 +539,31 @@ def video_available() -> str | None:
 
 
 class VideoReceiver:
-    """Reads one headset's view and keeps the newest frame, scaled and ready to draw.
+    """Reads one headset's view, decoding on this thread, and hands each frame on.
 
-    Decoding runs on this thread. `latest()` hands the UI the newest frame as a binary PPM it
-    can put straight into a Tk PhotoImage, or None if there is nothing new since the last call;
-    frames the UI was too slow for are simply skipped. `state` and `message` say what it is
-    doing, for the screen to show.
+    `render(frame, pts_us, arrived)` runs here for every decoded frame, with its presentation
+    time on the headset's clock and the time.monotonic() it arrived, and returns whatever the UI
+    draws. `latest()` hands the UI the newest result, or None if there is nothing new since the
+    last call; frames the UI was too slow for are simply skipped. Each callable in `taps` (a
+    recorder) gets every frame too. `state` and `message` say what it is doing, for the screen.
     """
 
-    def __init__(self, host: str, port: int, size: tuple[int, int]):
+    def __init__(self, host: str, port: int, render):
         self.host = host
         self.port = port
-        self._size = size
+        self._render = render
         self._lock = threading.Lock()
-        self._frame: bytes | None = None
+        self._frame = None
         self._stop = threading.Event()
         self._sock: socket.socket | None = None
+        self.taps: list = []
         self.state = "connecting"      # connecting | playing | ended | failed
         self.message = ""
+        self.render_error = ""
         self.frames = 0
         threading.Thread(target=self._run, name=f"hexr-video-{host}", daemon=True).start()
 
-    def resize(self, size: tuple[int, int]):
-        with self._lock:
-            self._size = size
-
-    def latest(self) -> bytes | None:
+    def latest(self):
         with self._lock:
             frame, self._frame = self._frame, None
         return frame
@@ -542,11 +592,14 @@ class VideoReceiver:
                 raise ValueError(f"unknown video codec {codec}")
             decoder = av.CodecContext.create("h264", "r")
             while not self._stop.is_set():
-                length, _flags, _pts = parse_packet_header(_read_exact(sock, 13))
+                length, _flags, pts = parse_packet_header(_read_exact(sock, 13))
                 payload = _read_exact(sock, length)
-                for packet in decoder.parse(payload):
-                    for frame in decoder.decode(packet):
-                        self._keep(frame)
+                # One packet is one encoder output, so it goes to the decoder whole, carrying its
+                # presentation time: that is what puts each haptic touch on the right frame.
+                packet = av.Packet(payload)
+                packet.pts = pts
+                for frame in decoder.decode(packet):
+                    self._keep(frame, pts if frame.pts is None else frame.pts, time.monotonic())
             self.state = "ended"
         except (OSError, ValueError, EOFError) as e:
             if self._stop.is_set() or isinstance(e, EOFError):
@@ -560,20 +613,21 @@ class VideoReceiver:
         finally:
             _close(sock)
 
-    def _keep(self, frame):
+    def _keep(self, frame, pts_us: int, arrived: float):
+        # A fault in drawing or recording one frame must not end the view: it is reported once
+        # (render_error, for the screen) and the next frame tries again.
+        for tap in list(self.taps):
+            try:
+                tap(frame, pts_us, arrived)
+            except Exception as e:  # noqa: BLE001
+                self.render_error = str(e) or type(e).__name__
+        try:
+            drawn = self._render(frame, pts_us, arrived)
+        except Exception as e:  # noqa: BLE001
+            self.render_error = str(e) or type(e).__name__
+            return
         with self._lock:
-            w, h = self._size
-        # Scaled by FFmpeg's own scaler, here on the decode thread, so the UI only copies.
-        rgb = frame.reformat(width=w, height=h, format="rgb24")
-        plane = rgb.planes[0]
-        row = w * 3
-        data = bytes(plane)
-        if plane.line_size != row:
-            # Rows can be padded; a PPM wants them packed.
-            data = b"".join(data[y * plane.line_size:y * plane.line_size + row] for y in range(h))
-        ppm = b"P6 %d %d 255\n" % (w, h) + data
-        with self._lock:
-            self._frame = ppm
+            self._frame = drawn
         self.frames += 1
         self.state = "playing"
 

@@ -189,15 +189,21 @@ hexr/
   state.py            the model the UI polls
   remote.py           HexR Remote: discovery, control links, video, no Tk
   headsets.py         the Headsets screen's model of every headset
+  haptics.py          what each headset's gloves are doing, moment by moment
+  overlay.py          the glove drawn over a headset's view
+  viewer.py           framing (square or 16:9) and the overlay, per frame
+  recorder.py         the view, glove included, recorded to an MP4
   theme.py            design tokens
   widgets.py          the Canvas widget library
   shell.py            frameless window, title bar, nav rail, language switch
   i18n.py             English and Simplified Chinese: tr() and the Chinese table
   settings.py         what is kept between runs: headset names, the language
-  screens/            connect · test · quicktest · headsets
-tests/                protocol, remote and language tests, no hardware needed
+  screens/            connect · test · quicktest · headsets · fullview
+tests/                protocol, remote, overlay and language tests, no hardware needed
 packaging/            Inno Setup script and wizard art
 tools/make_icon.py    generates the app icon
+tools/fake_headset.py a pretend headset, for trying the Headsets screen without
+                      a Quest: video, glove status and haptics on this computer
 ```
 
 `theme.py`, `widgets.py`, `shell.py` and `screens/base.py` are shared in spirit

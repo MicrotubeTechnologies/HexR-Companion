@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 from . import remote as R
 from . import settings
+from .haptics import HapticsTimeline
 from .i18n import tr
 
 # A headset that stopped announcing and cannot be reached has gone: switched off, or its app
@@ -51,6 +52,7 @@ class _Entry:
         self.error: str | None = None
         self.error_at = 0.0
         self.last_heard = time.monotonic()
+        self.haptics = HapticsTimeline()      # what its gloves do, for the view's overlay
 
 
 class Headsets:
@@ -135,6 +137,12 @@ class Headsets:
     def stop_view(self, key: str):
         self._send(key, R.stream("stop"))
 
+    def haptics(self, key: str) -> HapticsTimeline | None:
+        """The headset's haptics, for drawing the glove over its view."""
+        with self._lock:
+            e = self._entries.get(key)
+            return e.haptics if e else None
+
     def _send(self, key: str, line: str):
         with self._lock:
             entry = self._entries.get(key)
@@ -205,8 +213,12 @@ class Headsets:
 
     def on_link(self, key: str, state: str):
         with self._lock:
-            if key in self._entries:
-                self._entries[key].state = state
+            e = self._entries.get(key)
+            if e:
+                e.state = state
+        if e and state == "connected":
+            # A new connection may be a headset that restarted, with its clock started again.
+            e.haptics.reset_clock()
 
     def on_status(self, key: str, status: R.Status):
         with self._lock:
@@ -214,6 +226,14 @@ class Headsets:
             if e:
                 e.status = status
                 e.last_heard = time.monotonic()
+        if e:
+            e.haptics.on_status(status, time.monotonic())
+
+    def on_haptics(self, key: str, update: R.HapticsUpdate):
+        with self._lock:
+            e = self._entries.get(key)
+        if e:
+            e.haptics.on_haptics(update)
 
     def on_error(self, key: str, request: str, message: str):
         with self._lock:

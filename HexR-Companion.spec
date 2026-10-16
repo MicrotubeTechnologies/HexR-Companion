@@ -46,6 +46,10 @@ for _icon in ("assets/icon.ico", "assets/icon-16.png"):
     if os.path.exists(_icon):
         datas += [(_icon, "assets")]
 
+# The glove the Headsets view draws over the wearer's view, and its fonts (SIL OFL).
+if os.path.isdir("assets/overlay"):
+    datas += [("assets/overlay", "assets/overlay")]
+
 if MAC:
     # tools/build_mac.sh generates icon.icns from icon.png before building.
     icon = "assets/icon.icns" if os.path.exists("assets/icon.icns") else None
@@ -97,6 +101,8 @@ a = Analysis(
         'hexr.state', 'hexr.engine', 'hexr.protocol',
         'hexr.screens', 'hexr.screens.base', 'hexr.screens.connect',
         'hexr.screens.test', 'hexr.screens.quicktest',
+        'hexr.screens.headsets', 'hexr.screens.fullview', 'hexr.haptics',
+        'hexr.overlay', 'hexr.viewer', 'hexr.recorder', 'PIL.ImageTk',
     ],
     hookspath=[],
     runtime_hooks=[],

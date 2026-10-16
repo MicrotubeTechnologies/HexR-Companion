@@ -4,3 +4,5 @@ bleak>=0.22.0
 # PyAV has no universal wheel, so there the screen controls headsets without
 # showing their view (see hexr/remote.py, video_available).
 av>=12; sys_platform == "win32"
+# The glove drawn over that view, and recording it. Needed by the screen on every platform.
+pillow>=10.1
