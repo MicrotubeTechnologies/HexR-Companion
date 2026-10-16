@@ -31,6 +31,9 @@ class HeadsetLink(
         fun onLinkState(key: String, state: State)
         fun onStatus(key: String, status: HeadsetStatus)
         fun onError(key: String, request: String, message: String)
+
+        /** A "haptics" line: what one of the headset's gloves started doing, on its clock. */
+        fun onHaptics(key: String, update: HapticsUpdate) {}
     }
 
     @Volatile
@@ -119,6 +122,7 @@ class HeadsetLink(
                     when (val message = RemoteProtocol.parseLine(line)) {
                         is Message.Status -> listener.onStatus(key, message.status)
                         is Message.Error -> listener.onError(key, message.request, message.message)
+                        is Message.Haptics -> listener.onHaptics(key, message.update)
                         else -> Unit
                     }
 

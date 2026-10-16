@@ -25,50 +25,6 @@ const val MAX_FREQUENCY_HZ = 20
 
 private fun other(hand: String) = if (hand == LEFT) RIGHT else LEFT
 
-/**
- * The canned QA sweep, ported from `hexr/screens/quicktest.py`.
- *
- * The thresholds here must match the desktop tester's, or the same glove passes
- * on one and fails on the other. They were last retuned in desktop v0.2.0.
- */
-object QuickTest {
-    const val SETTLE_MS = 600L      // vent and let the channels fall back
-    const val DRIVE_MS = 2_000L     // how long each channel is held at full
-
-    /**
-     * Three words, because three is what a decision needs: the channel is doing
-     * its job, it is doing some of it, or it is not doing it.
-     *
-     * Sensors on a dead channel float on noise rather than reading a clean 0.0,
-     * which is why the failure line sits at 2 kPa and not at zero.
-     */
-    const val GOOD_KPA = 40.0       // above this the channel delivers full pressure
-    const val FAIL_KPA = 2.0        // below this it is not working at all
-
-    /**
-     * If the source/tank never develops pressure, every channel reads Fail for
-     * one reason — a dead pump — and reporting six dead channels would send
-     * someone replacing the wrong parts. This does not change any channel's
-     * verdict; it changes what the summary tells you to go and look at.
-     */
-    const val SOURCE_MIN_KPA = 10.0
-
-    val PASSING = setOf("Good")
-
-    /**
-     * Good / Poor / Fail, from the peak this channel reached.
-     *
-     * The source reading does not enter into it. A channel is judged on what it
-     * delivered; whether a healthy pump or a dead one is the reason sits in the
-     * summary, where it can be said once instead of six times.
-     */
-    fun verdict(peak: Double): String = when {
-        peak > GOOD_KPA -> "Good"
-        peak >= FAIL_KPA -> "Poor"
-        else -> "Fail"
-    }
-}
-
 /** Severity of a status line, mapped to a colour by the UI. */
 enum class Tone { Muted, Accent, Success, Danger }
 

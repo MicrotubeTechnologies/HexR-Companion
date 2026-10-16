@@ -38,6 +38,9 @@ object RemoteProtocol {
 
     fun stream(action: String) = """{"type":"stream","action":${str(action)}}"""
 
+    /** Put the wearer back on the scene's starting spot, facing its front (HexR 0.11.0 on). */
+    fun recenter() = """{"type":"recenter"}"""
+
     /** A JSON string literal: quotes, backslashes and control characters escaped. */
     fun str(s: String): String {
         val out = StringBuilder(s.length + 2).append('"')
@@ -81,6 +84,7 @@ object RemoteProtocol {
             "status" -> Message.Status(parseStatus(o))
             "error" -> Message.Error(o.optString("request"), o.optString("message"))
             "hello" -> Message.Welcome(o.optString("id"), o.optInt("control"), o.optInt("video"))
+            "haptics" -> parseHaptics(o)?.let { Message.Haptics(it) } ?: Message.Other
             else -> Message.Other
         }
     } catch (e: Exception) {
@@ -123,7 +127,53 @@ object RemoteProtocol {
         allowVideo = o.optBoolean("allowVideo"),
         exposeScenes = o.optBoolean("exposeScenes"),
         controllers = o.optInt("controllers"),
+        allowRecenter = o.optBoolean("allowRecenter", false),
+        haptics = o.optBoolean("haptics", false),
+        clockUs = longOf(o.opt("clockUs"), 0L),
     )
+
+    /**
+     * A "haptics" line (HexR 0.10.2 on): what one glove's channels started doing at `t`, in
+     * microseconds on the clock the video frames are stamped with. Null if it is not usable;
+     * a channel that is not one is skipped. The same checks as the desktop's `parse_haptics`.
+     */
+    fun parseHaptics(o: JSONObject): HapticsUpdate? {
+        val hand = o.opt("hand") as? String ?: return null
+        if (hand != "left" && hand != "right") return null
+        val list = o.optJSONArray("channels")
+        val channels = mutableListOf<HapticChannel>()
+        if (list != null) {
+            for (i in 0 until list.length()) {
+                val c = list.opt(i) as? JSONObject ?: continue
+                val finger = intOf(c.opt("finger"), -1)
+                val mode = c.opt("mode") as? String
+                if (finger !in 0..5 || mode !in HAPTIC_MODES) continue
+                channels += HapticChannel(
+                    finger = finger,
+                    mode = mode!!,
+                    intensity = intOf(c.opt("intensityPct"), 0).coerceIn(0, 100) / 100.0,
+                    hz = maxOf(0, intOf(c.opt("frequencyDeciHz"), 0)) / 10.0,
+                    tap = c.opt("tap") == true,
+                )
+            }
+        }
+        return HapticsUpdate(hand, longOf(o.opt("t"), 0L), channels)
+    }
+
+    private val HAPTIC_MODES = setOf("off", "pressure", "vibration", "pulse")
+
+    /** A JSON number as an Int; anything else (a boolean, a string) is not one. */
+    private fun intOf(v: Any?, default: Int): Int = when (v) {
+        is Boolean -> default
+        is Number -> v.toInt()
+        else -> default
+    }
+
+    private fun longOf(v: Any?, default: Long): Long = when (v) {
+        is Boolean -> default
+        is Number -> v.toLong()
+        else -> default
+    }
 
     private fun sceneOf(o: JSONObject) = SceneInfo(o.optInt("index", -1), o.optString("name"))
 
@@ -185,6 +235,7 @@ sealed class Message {
     data class Status(val status: HeadsetStatus) : Message()
     data class Error(val request: String, val message: String) : Message()
     data class Welcome(val id: String, val control: Int, val video: Int) : Message()
+    data class Haptics(val update: HapticsUpdate) : Message()
     data object Other : Message()
 }
 
@@ -207,11 +258,29 @@ data class HeadsetStatus(
     val allowVideo: Boolean,
     val exposeScenes: Boolean,
     val controllers: Int,
+    /** The app lets this phone recenter the wearer (HexR 0.11.0 with Allow Recenter). */
+    val allowRecenter: Boolean = false,
+    /** The app sends a "haptics" line for every command (HexR 0.10.2 on). */
+    val haptics: Boolean = false,
+    /** The headset's clock when it sent this, in microseconds: the one its video is stamped with. */
+    val clockUs: Long = 0L,
 ) {
     fun glove(hand: String): GloveState? = gloves.firstOrNull { it.hand.equals(hand, ignoreCase = true) }
 }
 
 data class SceneInfo(val index: Int, val name: String)
+
+/** One channel of a "haptics" line: what it started doing. */
+data class HapticChannel(
+    val finger: Int,            // 0 thumb … 4 pinky, 5 palm
+    val mode: String,           // off | pressure | vibration | pulse
+    val intensity: Double = 0.0,
+    val hz: Double = 0.0,
+    val tap: Boolean = false,   // on and off again within one headset frame
+)
+
+/** What one glove's channels started doing at `tUs`, on the headset's clock. */
+data class HapticsUpdate(val hand: String, val tUs: Long, val channels: List<HapticChannel>)
 
 data class CommandInfo(val id: String, val label: String)
 
