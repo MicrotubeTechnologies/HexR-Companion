@@ -1,4 +1,4 @@
-# Play Console listing — HEXR Companion 1.0.0
+# Play Console listing — HEXR Companion 1.2.0
 
 Everything the Console asks for, written out once so the fields can be pasted
 rather than reinvented at the keyboard. Character limits are Google's; the
@@ -81,12 +81,12 @@ This is a test and diagnostic instrument, not a runtime. HEXR gloves have no con
 HEXR and HEXR Companion are products of Microtube Technologies.
 ```
 
-### What's new — 500 max [380]
+### What's new — 500 max [402]
 
 ```
-New: the Headsets tab. Find every HEXR headset on your Wi-Fi, connect and disconnect its gloves, switch scenes, and watch what the wearer sees full screen, with their gloves beside it, to show an audience.
+The desktop HEXR Companion's new look, on the phone, with the orange HEXR glove on every screen.
 
-A simpler layout: two tabs, Test and Headsets. Scan for HEXR when no glove is connected; once one is, the Quick test and Bluetooth buttons sit at the top of the Test screen.
+Connect searches by itself and lights each glove as it connects. Test: tap a fingertip, then Trigger and Release all from the bar at the bottom. Quick test colours the glove green, amber or red. Headsets: watch the wearer's view live with their gloves lighting up beside it, and Recenter. English and 中文.
 ```
 
 ---

@@ -1,8 +1,12 @@
 # HEXR Companion for Android
 
-The desktop HEXR Companion as a phone app. Same three screens, same wire protocol,
-same quick-test verdicts — so a glove that passes on a bench laptop passes here,
-and a result recorded on either means the same thing.
+The desktop HEXR Companion as a phone app: the same glove on screen, the same words, the
+same wire protocol and the same quick-test verdicts, so a glove that passes on a bench
+laptop passes here, and a result recorded on either means the same thing. Two tabs: Test,
+for this phone's own gloves over Bluetooth, and Headsets, to watch a HEXR headset's view
+live with its gloves lighting up beside it. English and Chinese.
+
+How to use it: **[USER-GUIDE.md](USER-GUIDE.md)**, which the app's Help opens.
 
 Built with Kotlin and Jetpack Compose, talking to the glove over Android's own
 Bluetooth LE stack.
@@ -42,8 +46,8 @@ It installs as `com.microtube.hexr.tester.debug`, one letter different from the
 Play build's `com.microtube.hexr.tester`. That is deliberate — the two are
 signed with different keys and Android will not install one over the other, so
 they are kept as separate apps rather than as an upgrade that always fails. Both
-appear in the launcher under the same name and icon; the build line at the
-bottom of the scan screen (or the Gloves panel) is what tells them apart.
+appear in the launcher under the same name and icon; the build line under
+Details on the Connect screen (or the Gloves panel) is what tells them apart.
 
 ### Getting it from the Play Store instead
 
@@ -131,8 +135,8 @@ A phone gets pocketed mid-test in a way a laptop window does not, and a channel
 left inflated presses on someone's hand until the battery dies. Costing a
 technician one re-trigger is much the cheaper mistake.
 
-There is also an **All off** button pinned to the header on every screen, rather
-than living on one tab the way it does on the desktop.
+Release all also happens on Back while anything is on, and on leaving the Test tab:
+Release all is on that tab only, so a drive must not outlive it.
 
 ### Permissions
 
@@ -154,17 +158,29 @@ android/
     Model.kt             port of hexr/state.py
     BleEngine.kt         GATT: queue, MTU, two concurrent gloves
     HexrViewModel.kt     UI state, and the quick-test state machine
-    MainActivity.kt      Test and Headsets tabs, header buttons, panels,
+    MainActivity.kt      Test and Headsets tabs, header, panels, language,
                          permission flow, vent-on-stop
+    HeadsetsViewModel.kt the Headsets tab's state: links, watching, recenter
+    QuickTest.kt         the quick test's verdicts and words (screens/quicktest.py)
+    TestSettings.kt      pressure or vibration, intensity, frequency
+    GloveSearch.kt       which gloves were heard, strongest first
+    I18n.kt, I18nZh.kt   tr() and its Chinese (hexr/i18n.py)
     DemoSeed.kt          canned state for the store screenshots, debug only
+    glove/               the glove picture's geometry and states (hexr/overlay.py)
+    remote/              HexR Remote: protocol, link, video, haptics timeline
+                         (hexr/haptics.py), cast layout (hexr/viewer.py)
     ui/Theme.kt          tokens transcribed from hexr/theme.py
-    ui/Components.kt     Cell, Meter, Panel, sliders, tables
-    ui/ConnectScreen.kt  the scan screen (Test, no glove yet) and the Gloves panel
+    ui/Controls.kt       buttons, sticky bar, segmented, sliders, chips
+    ui/GloveArt.kt       the orange glove, drawn and tapped
+    ui/PressureList.kt   each finger's pressure against where it is set to go
+    ui/ConnectScreen.kt  Test with no glove yet, and the Gloves panel
     ui/TestScreen.kt     the Test tab once a glove is connected
     ui/QuickTestScreen.kt the Quick test panel
-    ui/HeadsetsScreen.kt the Headsets tab (HexR Remote)
+    ui/HeadsetsScreen.kt the Headsets tab's list
+    ui/HeadsetLive.kt    one headset live: the view, its gloves, the controls
   app/src/test/java/com/microtube/hexr/
-    ProtocolTest.kt      port of tests/test_protocol.py
+    ProtocolTest.kt      port of tests/test_protocol.py, and the other ports' tests
+    I18nTest.kt          every tr() sentence has its Chinese
   keystore.properties.example   shape of the gitignored signing config
   PLAY-RELEASE.md               shipping it to Google Play
   PRIVACY.md                    source text for the published privacy policy
@@ -190,6 +206,9 @@ of one release.
 - **Ramped vibration** (`vibrationRamped`) is implemented in `Protocol.kt` and
   tested, but no screen exposes it. Neither does the desktop app.
 - **Bundled fonts.** The desktop ships IBM Plex; this uses the system font, with
-  monospace for anything the glove reported.
+  monospace for anything the glove reported. The one font it carries is Archivo Black,
+  for the caption under the glove (PRESS. HOLD. RELEASE.), as the desktop draws it.
+- **Recording and export.** The desktop records a headset's cast to a video; the phone
+  only watches it live.
 - **Window chrome.** The custom title bar and left rail are a desktop idea; the
   phone gets a header and a bottom tab bar.

@@ -205,7 +205,7 @@ class MainActivity : ComponentActivity() {
         private const val PREFS = "settings"
         private const val LANGUAGE = "language"
         private const val GUIDE_URL =
-            "https://github.com/MicrotubeTechnologies/HexR-Companion/blob/android-headsets/USER-GUIDE.md"
+            "https://github.com/MicrotubeTechnologies/HexR-Companion/blob/android-headsets/android/USER-GUIDE.md"
     }
 }
 
