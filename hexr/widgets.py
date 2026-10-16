@@ -1,15 +1,13 @@
 """Canvas primitives for the HEXR Companion UI.
 
 Tkinter has no rounded corners, no borders that aren't 3D bevels, and no
-hover states, so every surface in the design is drawn by hand here. Two
-strategies are used, and it matters which one you reach for:
+hover states, so every surface in the design is drawn by hand here:
 
-* `Panel` — a real Frame that other widgets can be packed/gridded into. A
-  Canvas sits *behind* the content and paints the rounded background. The
-  content frame is inset by `pad`, so as long as `pad >= radius` it never
-  covers the painted corners.
-* Everything else (buttons, chips, toggles, meters) is a self-contained
-  Canvas that draws its own text. These size themselves to their content.
+* `Surface` — a real Frame that rows are packed into edge to edge, with its
+  rounded corners painted on top.
+* Everything else (buttons, chips, sliders, the pressure rows) is a
+  self-contained Canvas that draws its own text. These size themselves to
+  their content.
 
 Generalised from `RoundButton` / `_round_pts` in the previous aris_console.py.
 """
@@ -50,50 +48,11 @@ def draw_round(canvas: tk.Canvas, x1, y1, x2, y2, r, fill, outline=None,
     return items
 
 
-class Panel(tk.Frame):
-    """A rounded, bordered container. Pack or grid children into `.body`.
-
-    `pad` must be >= `radius` or the square content frame will clip the
-    painted corners.
-    """
-
-    def __init__(self, parent, bg=T.RAISED, border=T.BORDER_SOFT,
-                 radius=T.R_PANEL, pad=16, outer_bg=None, **kw):
-        outer_bg = outer_bg or parent.cget("bg")
-        super().__init__(parent, bg=outer_bg, **kw)
-        self._bg, self._border, self._radius = bg, border, radius
-        self._canvas = tk.Canvas(self, bg=outer_bg, highlightthickness=0, bd=0)
-        self._canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        self.body = tk.Frame(self, bg=bg)
-        self.body.pack(fill="both", expand=True, padx=pad, pady=pad)
-        tk.Misc.lower(self._canvas, self.body)  # Canvas.lower is tag_lower
-        self.bind("<Configure>", self._redraw)
-
-    def _redraw(self, _e=None):
-        c = self._canvas
-        c.delete("all")
-        w, h = self.winfo_width(), self.winfo_height()
-        if w > 2 and h > 2:
-            draw_round(c, 0, 0, w - 1, h - 1, self._radius,
-                       self._bg, self._border)
-
-    def restyle(self, bg=None, border=None):
-        if bg:
-            self._bg = bg
-            self.body.configure(bg=bg)
-        if border:
-            self._border = border
-        self._redraw()
-
-
 class Surface(tk.Frame):
     """A rounded, bordered container whose content runs edge to edge.
 
-    `Panel` paints its background behind an inset content frame, which means
-    content can never reach the rounded corners. Tables need the opposite: rows
-    that span the full width, with dividers that touch both edges.
-
-    So this does it the other way round — a normal 1 px-bordered Frame that
+    Tables need rows that span the full width, with dividers that touch both
+    edges, so this is a normal 1 px-bordered Frame that
     children pack into directly, with four small Canvases placed *on top* of
     the corners. Each paints the parent's background outside the corner radius
     and the panel fill inside it, which reads as a rounded corner.
@@ -433,83 +392,6 @@ def paint_restore(c: IconButton, fg: str, bg: str):
                        outline=fg, width=1.3, fill=bg)
 
 
-class Select(tk.Canvas):
-    """A themed dropdown. ttk.Combobox can't be styled to the design on
-    Windows, so this is a Canvas face plus a tk.Menu popup."""
-
-    def __init__(self, parent, values, value=None, command=None, label=None,
-                 width=None, height=34, radius=T.R_CTRL, bg=None,
-                 fill=T.RAISED, border=T.BORDER, px=12.5, extra_items=None):
-        bg = bg or parent.cget("bg")
-        super().__init__(parent, height=height, bg=bg, highlightthickness=0, bd=0)
-        self.values, self.command, self.label = values, command, label
-        # (label, callback, enabled_fn) rows appended under a separator —
-        # where profile management lives, so it sits with the thing it manages
-        self.extra_items = extra_items or []
-        self.value = value or (values[0] if values else "")
-        self.h, self.radius, self.fill, self.border = height, radius, fill, border
-        self._font = T.font(px)
-        self._label_font = T.font(10)
-        self._fixed_w = width
-        self._render()
-        self.bind("<Button-1>", self._popup)
-        self.configure(cursor="hand2")
-
-    def _width(self):
-        if self._fixed_w:
-            return self._fixed_w
-        w = 12 + max(self._font.measure(v) for v in self.values or [""]) + 8 + 9 + 12
-        if self.label:
-            w += self._label_font.measure(T.track(self.label)) + 8
-        return w
-
-    def _render(self):
-        self.delete("all")
-        w = self._width()
-        self.configure(width=w)
-        draw_round(self, 0, 0, w - 1, self.h - 1, self.radius,
-                   self.fill, self.border)
-        x = 12
-        if self.label:
-            self.create_text(x, self.h / 2, text=T.track(self.label),
-                             fill=T.TEXT_FAINT, anchor="w", font=self._label_font)
-            x += self._label_font.measure(T.track(self.label)) + 8
-        self.create_text(x, self.h / 2, text=self.value, fill=T.TEXT,
-                         anchor="w", font=self._font)
-        self.create_text(w - 12, self.h / 2, text="▼", fill=T.TEXT_FAINT,
-                         anchor="e", font=T.font(9))
-
-    def _popup(self, e):
-        m = tk.Menu(self, tearoff=0, bg=T.RAISED, fg=T.TEXT,
-                    activebackground=T.ACCENT, activeforeground=T.CANVAS,
-                    bd=0, relief="flat", font=self._font)
-        for v in self.values:
-            m.add_command(label=("• " if v == self.value else "    ") + v,
-                          command=lambda val=v: self._choose(val))
-        if self.extra_items:
-            m.add_separator()
-            for label, callback, enabled_fn in self.extra_items:
-                state = "normal" if (enabled_fn is None or enabled_fn()) else "disabled"
-                m.add_command(label=label, command=callback, state=state)
-        try:
-            m.tk_popup(self.winfo_rootx(), self.winfo_rooty() + self.h)
-        finally:
-            m.grab_release()
-
-    def _choose(self, value):
-        self.value = value
-        self._render()
-        if self.command:
-            self.command(value)
-
-    def set(self, value=None, values=None):
-        if values is not None:
-            self.values = values
-        if value is not None:
-            self.value = value
-        self._render()
-
-
 class NavRow(tk.Canvas):
     """One place in the left rail. Not numbered: the places are not steps."""
 
@@ -552,120 +434,18 @@ class NavRow(tk.Canvas):
             self.render()
 
 
-class Meter(tk.Canvas):
-    """A signal bar with a threshold marker.
-
-    Redraws by moving existing items rather than recreating them — these
-    update ~20 times a second, per port, and delete/recreate churn shows up as
-    flicker and wasted CPU.
-    """
-
-    def __init__(self, parent, height=16, bg=None, radius=T.R_METER):
-        bg = bg or parent.cget("bg")
-        # width=1: a Canvas asks for 378px by default. These stretch to their
-        # cell, so the request is meaningless — but it is not harmless. Left
-        # in, five of them made the sensor list demand 700px and squeeze the
-        # detail panel next to it down to a column of clipped text.
-        super().__init__(parent, width=1, height=height, bg=bg,
-                         highlightthickness=0, bd=0)
-        self.h, self.radius = height, radius
-        self._v, self._thr, self._over, self._on = 0.0, 0.6, False, True
-        self._items = {}
-        self.bind("<Configure>", lambda e: self._build())
-
-    def _build(self):
-        self.delete("all")
-        self._items.clear()
-        w = self.winfo_width()
-        if w <= 1:
-            return
-        draw_round(self, 0, 0, w - 1, self.h - 1, self.radius, T.RAIL,
-                   T.BORDER_SOFT)
-        self._items["fill"] = self.create_rectangle(
-            1, 1, 1, self.h - 1, width=0, fill=T.METER_IDLE)
-        self._items["thr"] = self.create_rectangle(
-            0, 0, 0, self.h, width=0, fill=T.ACCENT)
-        self._paint()
-
-    def _paint(self):
-        if not self._items:
-            return
-        w = self.winfo_width()
-        inner = max(0, w - 2)
-        fill_w = 1 + inner * max(0.0, min(1.0, self._v))
-        colour = (T.BORDER if not self._on
-                  else T.ACCENT if self._over else T.METER_IDLE)
-        self.coords(self._items["fill"], 1, 1, fill_w, self.h - 1)
-        self.itemconfigure(self._items["fill"], fill=colour)
-        x = 1 + inner * max(0.0, min(1.0, self._thr))
-        self.coords(self._items["thr"], x - 1, 0, x + 1, self.h)
-        self.itemconfigure(self._items["thr"],
-                           state="normal" if self._on else "hidden")
-
-    def set(self, value=None, thr=None, over=None, on=None):
-        if value is not None:
-            self._v = value
-        if thr is not None:
-            self._thr = thr
-        if over is not None:
-            self._over = over
-        if on is not None:
-            self._on = on
-        if not self._items:
-            self._build()
-        else:
-            self._paint()
-
-
-class Trace(tk.Canvas):
-    """The calibration trace: N recent samples as bars, plus a threshold line."""
-
-    def __init__(self, parent, samples=48, height=150, bg=None):
-        bg = bg or parent.cget("bg")
-        super().__init__(parent, width=1, height=height, bg=bg,
-                         highlightthickness=0, bd=0)     # see Meter on width
-        self.n, self.h = samples, height
-        self._values = [0.0] * samples
-        self._thr = 0.6
-        self.bind("<Configure>", lambda e: self._paint())
-
-    def set(self, values, thr):
-        vals = list(values)[-self.n:]
-        if len(vals) < self.n:
-            vals = [0.0] * (self.n - len(vals)) + vals
-        self._values, self._thr = vals, thr
-        self._paint()
-
-    def _paint(self):
-        self.delete("all")
-        w = self.winfo_width()
-        if w <= 1:
-            return
-        draw_round(self, 0, 0, w - 1, self.h - 1, T.R_CTRL, T.RAIL,
-                   T.BORDER_SOFT)
-        pad = 10
-        inner_w, inner_h = w - pad * 2, self.h - pad * 2
-        gap = 2
-        bar_w = max(1.0, (inner_w - gap * (self.n - 1)) / self.n)
-        base = self.h - pad
-        for i, v in enumerate(self._values):
-            v = max(0.0, min(1.0, v))
-            bh = max(2.0, v * inner_h)
-            x = pad + i * (bar_w + gap)
-            self.create_rectangle(x, base - bh, x + bar_w, base, width=0,
-                                  fill=T.ACCENT if v >= self._thr else T.TRACE_IDLE)
-        y = base - max(0.0, min(1.0, self._thr)) * inner_h
-        self.create_line(pad, y, w - pad, y, fill=T.ACCENT, width=1)
-
-
 class Slider(tk.Canvas):
     """A themed range slider. ttk.Scale can't match the design on Windows."""
 
     def __init__(self, parent, value=0.6, lo=0.05, hi=0.95, command=None,
                  height=14, bg=None):
         bg = bg or parent.cget("bg")
+        # width=1: a Canvas asks for 378px by default. These stretch to their
+        # cell, so the request is meaningless — but it is not harmless: left in,
+        # a row of them demands more room than the window has and squeezes
+        # everything beside it.
         super().__init__(parent, width=1, height=height, bg=bg,
-                         highlightthickness=0, bd=0)     # see Meter on width
+                         highlightthickness=0, bd=0)
         self.value, self.lo, self.hi = value, lo, hi
         self.command, self.h = command, height
         self.bind("<Configure>", lambda e: self._paint())
@@ -697,188 +477,6 @@ class Slider(tk.Canvas):
     def set(self, value):
         self.value = max(self.lo, min(self.hi, value))
         self._paint()
-
-
-class Readout(Panel):
-    """One of the calibration panel's labelled value cards."""
-
-    def __init__(self, parent, label, value="—", accent=False):
-        super().__init__(parent, bg=T.INSET,
-                         border=T.ACCENT if accent else T.BORDER_SOFT,
-                         radius=T.R_CTRL, pad=12)
-        fg = T.ACCENT if accent else T.TEXT_FAINT
-        tk.Label(self.body, text=T.track(label), bg=T.INSET, fg=fg,
-                 font=T.font(10), anchor="w").pack(fill="x")
-        self.value = tk.Label(self.body, text=value, bg=T.INSET,
-                              fg=T.ACCENT if accent else T.TEXT,
-                              font=T.mono(18), anchor="w")
-        self.value.pack(fill="x", pady=(5, 0))
-
-    def set(self, text):
-        self.value.configure(text=text)
-
-
-class Toggle(tk.Canvas):
-    """The 30x17 enable switch."""
-
-    def __init__(self, parent, command=None, bg=None):
-        bg = bg or parent.cget("bg")
-        super().__init__(parent, width=30, height=17, bg=bg,
-                         highlightthickness=0, bd=0)
-        self.command, self.on, self.live = command, True, True
-        self.bind("<Button-1>", self._click)
-        self.configure(cursor="hand2")
-        self.render()
-
-    def _click(self, _e):
-        # must not bubble: clicking the switch toggles, it does not re-select
-        if self.command:
-            self.command()
-        return "break"
-
-    def set(self, on, live=True):
-        if (on, self.live) == (self.on, live):
-            return
-        self.on, self.live = on, live
-        self.render()
-
-    def render(self):
-        self.delete("all")
-        # an enabled sensor with nothing plugged in cannot fire; showing its
-        # switch at full accent would claim otherwise
-        track = (T.ACCENT if self.live else T.BORDER) if self.on else T.BORDER
-        draw_round(self, 0, 0, 29, 16, 8, track)
-        x = 15 if self.on else 2
-        self.create_oval(x, 2, x + 13, 15,
-                         fill="#FFFFFF" if self.live else T.TEXT_OFF, width=0)
-
-
-class Cell(tk.Canvas):
-    """A selectable tile — mouse actions, presets, segmented tabs."""
-
-    def __init__(self, parent, label, sub=None, command=None, height=56,
-                 bg=None, mono_label=True):
-        bg = bg or parent.cget("bg")
-        super().__init__(parent, width=1, height=height, bg=bg,
-                         highlightthickness=0, bd=0)
-        self.label, self.sub, self.command = label, sub, command
-        self.h, self.selected, self._hot = height, False, False
-        self.mono_label = mono_label
-        self.bind("<Button-1>", lambda e: self.command and self.command(self.label))
-        self.bind("<Enter>", lambda e: self._set_hot(True))
-        self.bind("<Leave>", lambda e: self._set_hot(False))
-        self.bind("<Configure>", lambda e: self.render())
-        self.configure(cursor="hand2")
-
-    def _set_hot(self, hot):
-        self._hot = hot
-        self.render()
-
-    def set(self, selected):
-        if selected == self.selected:
-            return
-        self.selected = selected
-        self.render()
-
-    def render(self):
-        self.delete("all")
-        w = self.winfo_width()
-        if w <= 1:
-            return
-        if self.selected:
-            fill, edge, fg = T.ACCENT_FILL, T.ACCENT, T.ACCENT
-        else:
-            fill, edge = T.INSET, T.ACCENT if self._hot else T.BORDER
-            fg = T.ACCENT if self._hot else T.TEXT_2
-        draw_round(self, 0, 0, w - 1, self.h - 1, T.R_CTRL, fill, edge)
-        if self.sub:
-            self.create_text(w / 2, self.h / 2 - 8, text=self.label, fill=fg,
-                             font=T.font(12.5))
-            self.create_text(w / 2, self.h / 2 + 10, text=self.sub,
-                             fill=T.TEXT_FAINT, font=T.mono(10))
-        else:
-            self.create_text(w / 2, self.h / 2, text=self.label, fill=fg,
-                             font=T.mono(11.5) if self.mono_label else T.font(12.5))
-
-
-class KeyCap(tk.Canvas):
-    """One key on the QWERTY board, with an optional owner badge."""
-
-    H = 32
-
-    def __init__(self, parent, label, command=None, bg=None):
-        # width=1: a Canvas asks for 378px by default, which would blow the row
-        # far past the panel and clip every key after the first few. The real
-        # width comes from the column weight.
-        bg = bg or parent.cget("bg")
-        super().__init__(parent, width=1, height=self.H, bg=bg,
-                         highlightthickness=0, bd=0)
-        self.label, self.command = label, command
-        self.owner = None           # sensor number that owns this key
-        self.mine = False           # owned by the currently selected sensor
-        self.bind("<Button-1>", lambda e: self.command and self.command(label))
-        self.bind("<Configure>", lambda e: self.render())
-        self.configure(cursor="hand2")
-
-    def set(self, owner, mine):
-        if (owner, mine) == (self.owner, self.mine):
-            return
-        self.owner, self.mine = owner, mine
-        self.render()
-
-    def render(self):
-        self.delete("all")
-        w = self.winfo_width()
-        if w <= 1:
-            return
-        if self.mine:
-            fill, fg, edge = T.ACCENT, T.CANVAS, T.ACCENT
-        elif self.owner is not None:
-            fill, fg, edge = T.ACCENT_FILL, T.ACCENT, T.ACCENT_EDGE
-        else:
-            fill, fg, edge = T.INSET, T.TEXT_2, T.BORDER
-        draw_round(self, 0, 4, w - 1, self.H - 1, T.R_CHIP, fill, edge)
-        self.create_text(w / 2, (self.H + 4) / 2, text=self.label, fill=fg,
-                         font=T.font(11))
-        if self.owner is not None and not self.mine:
-            bw = max(13, T.mono(9, 600).measure(str(self.owner)) + 8)
-            x = w - bw - 1
-            draw_round(self, x, 0, x + bw, 13, 6, T.ACCENT)
-            self.create_text(x + bw / 2, 6.5, text=str(self.owner),
-                             fill=T.CANVAS, font=T.mono(9, 600))
-
-
-class Chip(tk.Canvas):
-    """The action chip that lights up while its sensor is firing."""
-
-    def __init__(self, parent, height=32, width=1, bg=None):
-        bg = bg or parent.cget("bg")
-        super().__init__(parent, width=width, height=height, bg=bg,
-                         highlightthickness=0, bd=0)
-        self.h, self.label, self.firing, self.on = height, "—", False, True
-        self.command = None
-        self.bind("<Configure>", lambda e: self.render())
-        self.bind("<Button-1>", lambda e: self.command and self.command())
-
-    def set(self, label, firing, on=True):
-        if (label, firing, on) == (self.label, self.firing, self.on):
-            return                          # nothing changed; skip the redraw
-        self.label, self.firing, self.on = label, firing, on
-        self.render()
-
-    def render(self):
-        self.delete("all")
-        w = self.winfo_width()
-        if w <= 1:
-            return
-        if self.firing:
-            fill, fg, edge = T.ACCENT, T.CANVAS, T.ACCENT
-        else:
-            fill, edge = T.INSET, T.BORDER
-            fg = T.TEXT if self.on else T.TEXT_OFF
-        draw_round(self, 0, 0, w - 1, self.h - 1, T.R_CELL, fill, edge)
-        self.create_text(w / 2, self.h / 2, text=self.label, fill=fg,
-                         font=T.mono(12.5))
 
 
 class Disclosure(tk.Frame):
@@ -916,72 +514,6 @@ class Disclosure(tk.Frame):
             self.body.pack_forget()
 
 
-class Section(tk.Frame):
-    """One panel of an accordion: a numbered header with a live status on the
-    right, over a body that packs and unpacks.
-
-    A sensor's two questions — what range has it learned, and what does it
-    press — will not both fit in the detail column at once, and neither will
-    shrink to fit without losing the QWERTY board or the trace. Stacking them
-    as an accordion keeps both one click away, keeps the dependency between
-    them visible (there is no point assigning a key to a sensor that has not
-    been taught), and lets the collapsed one still report its state in its
-    header rather than going silent.
-    """
-
-    def __init__(self, parent, num, title, command=None, bg=None):
-        bg = bg or parent.cget("bg")
-        super().__init__(parent, bg=bg)
-        self._bg, self._open, self.command = bg, False, command
-
-        head = tk.Frame(self, bg=bg, cursor="hand2")
-        head.pack(fill="x")
-        self.head = head
-        self.num = tk.Label(head, text=num, bg=bg, fg=T.TEXT_OFF,
-                            font=T.mono(11), width=2, anchor="w")
-        self.num.pack(side="left")
-        self.title = tk.Label(head, text=T.track(title), bg=bg,
-                              fg=T.TEXT_FAINT, font=T.font(10), anchor="w")
-        self.title.pack(side="left", padx=(6, 0))
-        self.chev = tk.Label(head, text="▾", bg=bg, fg=T.TEXT_FAINT,
-                             font=T.font(9), anchor="e")
-        self.chev.pack(side="right")
-        self.status = tk.Label(head, text="", bg=bg, fg=T.TEXT_FAINT,
-                               font=T.font(11.5), anchor="e")
-        self.status.pack(side="right", padx=(0, 9))
-
-        self.body = tk.Frame(self, bg=bg)
-
-        for w in (head, self.num, self.title, self.status, self.chev):
-            w.bind("<Button-1>", lambda e: self.command and self.command())
-            w.bind("<Enter>", lambda e: self._hot(True))
-            w.bind("<Leave>", lambda e: self._hot(False))
-
-    def _hot(self, on):
-        if not self._open:
-            self.title.configure(fg=T.ACCENT if on else T.TEXT_FAINT)
-            self.chev.configure(fg=T.ACCENT if on else T.TEXT_FAINT)
-
-    def set_status(self, text, colour=T.TEXT_FAINT):
-        self.status.configure(text=text, fg=colour)
-
-    def is_open(self) -> bool:
-        return self._open
-
-    def set_open(self, on: bool):
-        if on == self._open:
-            return
-        self._open = on
-        self.num.configure(fg=T.ACCENT if on else T.TEXT_OFF)
-        self.title.configure(fg=T.TEXT if on else T.TEXT_FAINT)
-        self.chev.configure(text="▴" if on else "▾",
-                            fg=T.TEXT_FAINT if on else T.TEXT_FAINT)
-        if on:
-            self.body.pack(fill="both", expand=True, pady=(12, 0))
-        else:
-            self.body.pack_forget()
-
-
 class Scrubber(Slider):
     """Where a video is: what has played is lit, and a click or a drag moves it. `dragging`
     says the hand is on it, so the video's own progress does not fight the drag."""
@@ -1010,7 +542,7 @@ class Progress(tk.Canvas):
     def __init__(self, parent, height=4, bg=None):
         bg = bg or parent.cget("bg")
         super().__init__(parent, width=1, height=height, bg=bg,
-                         highlightthickness=0, bd=0)     # see Meter on width
+                         highlightthickness=0, bd=0)     # see Slider on width
         self.h, self._v, self._colour = height, 0.0, T.ACCENT
         self.bind("<Configure>", lambda e: self._paint())
 
@@ -1124,6 +656,7 @@ class ScrollArea(tk.Frame):
 # -- drawn marks ----------------------------------------------------------------------------------
 # Painters for Button(icon=...): (canvas, centre x, centre y, colour). IBM Plex has no
 # glyph for these, and a box where a mark should be is worse than none.
+
 
 def icon_more(c, cx, cy, fg):
     """⋯ — more things to do."""

@@ -47,9 +47,6 @@ SUCCESS = "#3ECF8E"         # connected, calibrated, healthy latency
 DANGER = "#E5484D"          # stop, close hover, destructive
 WARN = "#E8B04B"            # poor, low battery: worth a look, not a fault
 
-METER_IDLE = "#3A4048"      # below-threshold signal fill
-TRACE_IDLE = "#343A42"      # below-threshold trace bar
-
 # ---------------------------------------------------------------------------
 # Geometry
 # ---------------------------------------------------------------------------
