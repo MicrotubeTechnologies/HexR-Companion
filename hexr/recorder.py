@@ -1,12 +1,18 @@
-"""Records a headset's view, as it is shown with the glove on top, to an MP4 on this computer.
+"""Records a headset's view to an MP4 on this computer, and what its gloves did beside it.
 
-Frames come from the video thread and are drawn and encoded on this recorder's own thread, so
-recording never slows the live view; if this falls behind, frames are dropped and counted rather
-than piling up. Each frame keeps the headset's presentation time, so the file plays at the speed
-it happened even when the stream's frame rate wanders.
+The view is recorded as the headset sends it, square and with nothing drawn on it. Beside it
+goes a .gloves.jsonl: each glove's state for the frames where it changed (the levels, the
+vibrations, the caption's word) and what the headset said of each glove (connected, battery).
+The Recordings screen turns the two into a video to share, in landscape, portrait or square
+(hexr/exporter.py), as often as wanted, without the moment having to happen again.
 
-Beside the video goes a .haptics.json, when the headset sent exact haptics: the touches in
-HexR Overlay Studio's project format, so the overlay can be restyled there afterwards.
+Frames come from the video thread and are encoded on this recorder's own thread, so recording
+never slows the live view; if this falls behind, frames are dropped and counted rather than
+piling up. Each frame keeps the headset's presentation time, so the file plays at the speed it
+happened even when the stream's frame rate wanders.
+
+When the headset sent exact haptics, a .haptics.json goes beside it too: the touches in HexR
+Overlay Studio's project format.
 """
 
 from __future__ import annotations
@@ -21,16 +27,20 @@ import threading
 import time
 from fractions import Fraction
 
-from .haptics import HapticsTimeline
+from .haptics import FINGERS, HandState, HapticsTimeline
 from .i18n import tr
-from .viewer import Compositor
 
 TIME_BASE = Fraction(1, 90000)
 FINGER_NAMES = ("thumb", "index", "middle", "ring", "pinky", "palm")
+HANDS = ("left", "right")
+GLOVES_SUFFIX = ".gloves.jsonl"
 
 
 def videos_folder() -> str:
-    """Where recordings go: the user's Videos (Movies on a Mac), in a HEXR Companion folder."""
+    """Where recordings go: the user's Videos (Movies on a Mac), in a HEXR Companion folder.
+    HEXR_VIDEOS, when set, is used instead: for tests and screenshots."""
+    if os.environ.get("HEXR_VIDEOS"):
+        return os.environ["HEXR_VIDEOS"]
     base = None
     if sys.platform == "win32":
         try:
@@ -52,24 +62,61 @@ def videos_folder() -> str:
     return os.path.join(base, "HEXR Companion")
 
 
+def recordings_folder() -> str:
+    return os.path.join(videos_folder(), "Recordings")
+
+
+def exports_folder() -> str:
+    return os.path.join(videos_folder(), "Exports")
+
+
+def safe_name(text: str) -> str:
+    return re.sub(r'[\\/:*?"<>|]+', " ", text).strip()
+
+
 def recording_path(title: str, folder: str | None = None) -> str:
-    folder = folder or videos_folder()
+    folder = folder or recordings_folder()
     os.makedirs(folder, exist_ok=True)
-    safe = re.sub(r'[\\/:*?"<>|]+', " ", title).strip() or "Headset"
     stamp = datetime.datetime.now().strftime("%Y-%m-%d %H.%M.%S")
-    return os.path.join(folder, f"{safe} {stamp}.mp4")
+    return os.path.join(folder, f"{safe_name(title) or 'Headset'} {stamp}.mp4")
+
+
+def gloves_path(video_path: str) -> str:
+    return os.path.splitext(video_path)[0] + GLOVES_SUFFIX
+
+
+# -- a glove's state, as a line of the .gloves.jsonl --------------------------------------------
+
+def state_to_json(st: HandState) -> dict:
+    return {"l": [round(v, 3) for v in st.levels], "v": [round(v, 2) for v in st.vibrating],
+            "s": [round(v, 3) for v in st.since], "w": st.words, "d": st.word,
+            "hz": round(st.hz, 2)}
+
+
+def state_from_json(d: dict) -> HandState:
+    st = HandState()
+    for name, attr in (("l", "levels"), ("v", "vibrating"), ("s", "since")):
+        values = d.get(name)
+        if isinstance(values, list) and len(values) == FINGERS:
+            setattr(st, attr, [float(v) for v in values])
+    st.words, st.word = int(d.get("w", 0)), int(d.get("d", -1))
+    st.hz = float(d.get("hz", 0.0))
+    return st
 
 
 class Recorder:
     """One recording. tap() from the video thread, stop() from the UI; `on_done(recorder)` runs
-    on the recorder's thread when the file is finished (or has failed: see `error`)."""
+    on the recorder's thread when the file is finished (or has failed: see `error`).
+    `badges_source()` says what the headset says of each glove now, as the view's panels show."""
 
     QUEUE = 90           # three seconds at 30 fps
 
-    def __init__(self, path: str, timeline: HapticsTimeline, look_source, on_done=None):
+    def __init__(self, path: str, timeline: HapticsTimeline, badges_source=lambda: (),
+                 on_done=None, title: str = ""):
         self.path = path
         self.timeline = timeline
-        self._look_source = look_source        # () -> the ViewLook to draw with now
+        self.title = title
+        self._badges_source = badges_source
         self._on_done = on_done
         self._queue: queue.Queue = queue.Queue(maxsize=self.QUEUE)
         self._stop = threading.Event()
@@ -80,7 +127,6 @@ class Recorder:
         self.error = ""
         self.done = False
         self.log_path = ""
-        self._landscape = look_source().landscape   # fixed for the file: its size cannot change
 
     def start(self):
         self._thread.start()
@@ -89,7 +135,8 @@ class Recorder:
         if self._stop.is_set():
             return
         try:
-            self._queue.put_nowait((frame, pts_us, arrived))
+            # The gloves are read now, as the frame arrives: the badges are what is true now.
+            self._queue.put_nowait((frame, pts_us, arrived, self._badges_source()))
         except queue.Full:
             self.dropped += 1
 
@@ -103,13 +150,12 @@ class Recorder:
     # -- the recording thread -------------------------------------------------------------------
 
     def _run(self):
-        container = stream = None
+        container = stream = gloves = None
         first = last = None          # (pts_us, frame time on the headset's clock)
         last_pts = -1
+        last_line = None
         size = None
         try:
-            import av
-            compositor = Compositor(self.timeline, self._look_source())
             while True:
                 try:
                     item = self._queue.get(timeout=0.2)
@@ -117,19 +163,27 @@ class Recorder:
                     if self._stop.is_set():
                         break
                     continue
-                frame, pts_us, arrived = item
-                compositor.look = self._look_source().but(landscape=self._landscape)
-                img = compositor.compose(frame, pts_us, arrived)
+                frame, pts_us, arrived, badges = item
                 if container is None:
-                    size = (img.width // 2 * 2, img.height // 2 * 2)
-                    container, stream = _open(self.path, size)
+                    size = (frame.width // 2 * 2, frame.height // 2 * 2)
+                    container, stream = open_video(self.path, size)
                     first = (pts_us, self.timeline.frame_time(pts_us, arrived))
-                if img.size != size:
-                    img = img.resize(size)
+                    gloves = open(gloves_path(self.path), "w", encoding="utf-8")
+                    gloves.write(json.dumps({
+                        "hexr": "gloves", "version": 1, "title": self.title,
+                        "started": datetime.datetime.now().isoformat(timespec="seconds"),
+                        "size": list(size)}) + "\n")
                 last = (pts_us, self.timeline.frame_time(pts_us, arrived))
                 pts = max(last_pts + 1, round((pts_us - first[0]) / 1e6 / TIME_BASE))
                 last_pts = pts
-                out = av.VideoFrame.from_image(img).reformat(format="yuv420p")
+
+                line = {h: state_to_json(self.timeline.state(h, pts_us, arrived)) for h in HANDS}
+                line["badges"] = {h: [b.state, b.battery] for h, b in badges}
+                if line != last_line:
+                    last_line = line
+                    gloves.write(json.dumps({"t": round(float(pts * TIME_BASE), 4), **line}) + "\n")
+
+                out = frame.reformat(width=size[0], height=size[1], format="yuv420p")
                 out.pts = pts
                 out.time_base = TIME_BASE
                 for packet in stream.encode(out):
@@ -152,6 +206,8 @@ class Recorder:
                 except Exception:  # noqa: BLE001
                     pass
         finally:
+            if gloves is not None:
+                gloves.close()
             self.done = True
             if self._on_done:
                 self._on_done(self)
@@ -180,12 +236,13 @@ class Recorder:
         return path
 
 
-def _open(path: str, size: tuple[int, int]):
+def open_video(path: str, size: tuple[int, int], rate: int = 30):
+    """An MP4 to write H.264 into: (container, stream), timed in TIME_BASE."""
     import av
     container = av.open(path, "w", options={"movflags": "+faststart"})
     for name in ("libx264", "h264_mf", "mpeg4"):
         try:
-            stream = container.add_stream(name, rate=30)
+            stream = container.add_stream(name, rate=rate)
             break
         except Exception:  # noqa: BLE001
             continue
@@ -194,6 +251,7 @@ def _open(path: str, size: tuple[int, int]):
         raise RuntimeError(tr("This build has no video encoder."))
     stream.width, stream.height = size
     stream.pix_fmt = "yuv420p"
+    stream.codec_context.thread_type = "AUTO"
     stream.time_base = TIME_BASE
     stream.codec_context.time_base = TIME_BASE
     if stream.codec_context.name == "libx264":

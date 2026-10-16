@@ -55,8 +55,9 @@ Python 3.10 or newer. The only runtime dependency is `bleak`.
 
 ## Using it
 
-Two entries in the rail: **Test** for this computer's own gloves, **Headsets**
-for HEXR headsets on the network.
+Three entries in the rail: **Test** for this computer's own gloves, **Headsets**
+for HEXR headsets on the network, and **Recordings** for what was recorded from
+them.
 
 **Test** — until a glove connects it shows a left and a right glove, dimmed, and
 searches on its own: power on the arm module and press **Connect** when it is
@@ -77,11 +78,16 @@ Details** in its title row, off by default and remembered per screen.
 **Help** in the rail opens [USER-GUIDE.md](USER-GUIDE.md).
 
 **Headsets** — every headset running a HEXR app with HexR Remote (HexR 0.10.0
-or newer) on the same network: connect and disconnect its gloves through it,
-change its scene, run its app's commands, and watch its view once the wearer
-allows it. The protocol is `Documentation~/RemoteProtocol.md` in the
+or newer) on the same network: watch its view once the wearer allows it, with a
+panel per glove beside it that lights up as the glove fires and shows whether
+it is connected (click a panel to connect or disconnect it), recenter the
+wearer, and record. The protocol is `Documentation~/RemoteProtocol.md` in the
 com.microtube.hexr package, the same one the Android app's Headsets tab speaks.
 The view needs PyAV, which only the Windows build ships.
+
+**Recordings** — a recording is the view as it came and what the gloves did,
+frame by frame. Export makes it a video in landscape (1920×1080) or portrait
+(1080×1920), the view with its gloves beside it, or square, the view alone.
 
 **Escape is the panic key**, and **Release all** sits under Hold to feel on the
 Test screen. Hold to feel lets go when the window loses focus or Test is left.
@@ -197,16 +203,17 @@ hexr/
   remote.py           HexR Remote: discovery, control links, video, no Tk
   headsets.py         the Headsets screen's model of every headset
   haptics.py          what each headset's gloves are doing, moment by moment
-  overlay.py          the glove drawn over a headset's view, and in the app's own screens
+  overlay.py          the HEXR glove, lit as it fires, drawn with PIL
   gloveview.py        that glove as a Tk widget: tap a finger, see it light
-  viewer.py           framing (square or 16:9) and the overlay, per frame
-  recorder.py         the view, glove included, recorded to an MP4
+  viewer.py           the view beside its gloves: landscape, portrait or square
+  recorder.py         the view as it came, and what the gloves did, recorded
+  exporter.py         a recording made into a video in the shape wanted
   theme.py            design tokens
   widgets.py          the Canvas widget library
   shell.py            frameless window, title bar, nav rail, language switch
   i18n.py             English and Simplified Chinese: tr() and the Chinese table
   settings.py         what is kept between runs: headset names, the language, Details
-  screens/            connect · test · quicktest · headsets · fullview
+  screens/            connect · test · quicktest · headsets · fullview · recordings
 tests/                protocol, remote, overlay, glove and language tests, no hardware needed
 packaging/            Inno Setup script and wizard art
 tools/make_icon.py    generates the app icon

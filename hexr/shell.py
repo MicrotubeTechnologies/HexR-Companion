@@ -34,12 +34,13 @@ from .widgets import (GlovesButton, IconButton, NavRow, TextLink, Tooltip,
 
 MAC = sys.platform == "darwin"
 
-# Two jobs, two places: this computer's own gloves (Test), and the HEXR
-# headsets on the network (Headsets). Connecting and the quick test are both on
+# Three places: this computer's own gloves (Test), the HEXR headsets on the
+# network (Headsets), and what was recorded from them, made into videos
+# (Recordings). Connecting and the quick test are both on
 # the way to testing a glove, so they live under Test rather than beside it:
 # Test is connecting until a glove connects, the Quick test is a button on Test,
 # and the header's glove status opens the gloves from anywhere.
-STEPS = [(N_("Test"), "test"), (N_("Headsets"), "headsets")]
+STEPS = [(N_("Test"), "test"), (N_("Headsets"), "headsets"), (N_("Recordings"), "recordings")]
 
 USER_GUIDE_URL = "https://github.com/MicrotubeTechnologies/HexR-Companion/blob/main/USER-GUIDE.md"
 

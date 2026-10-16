@@ -42,6 +42,7 @@ def main():
 
     # Settings in a folder of their own, before anything reads them.
     os.environ["APPDATA"] = tempfile.mkdtemp(prefix="hexr-snapshots-")
+    os.environ["HEXR_VIDEOS"] = tempfile.mkdtemp(prefix="hexr-snapshots-videos-")
     from hexr import i18n
     i18n._lang = args.lang
 
@@ -248,6 +249,24 @@ def main():
                    None)); t += 0.5
     at(t, lambda: shot("headsets-details")); t += 0.3
     at(t, lambda: details("headsets", False)); t += 0.3
+
+    # -- a recording, and exporting it
+    def detail():
+        return app.screens["headsets"]._detail
+    at(t, lambda: detail()._toggle_record()); t += 4.0
+    at(t, lambda: shot("headsets-recording")); t += 0.2
+    at(t, lambda: detail()._toggle_record()); t += 2.5
+    at(t, lambda: shot("headsets-saved")); t += 0.2
+    at(t, lambda: detail()._open_recording()); t += 2.5
+    at(t, lambda: shot("recordings-landscape")); t += 0.2
+    recs = lambda: app.screens["recordings"]  # noqa: E731
+    at(t, lambda: (recs().shape.set("portrait"), recs()._pick_shape("portrait"))); t += 2.0
+    at(t, lambda: shot("recordings-portrait")); t += 0.2
+    at(t, lambda: recs()._export_clicked()); t += 1.0
+    at(t, lambda: shot("recordings-exporting")); t += 8.0
+    at(t, lambda: shot("recordings-exported")); t += 0.2
+    at(t, lambda: (recs().shape.set("square"), recs()._pick_shape("square"))); t += 2.0
+    at(t, lambda: shot("recordings-square")); t += 0.2
 
     def finish():
         if headset:

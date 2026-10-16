@@ -2,9 +2,10 @@
 
 At an event a facilitator would otherwise have to take a headset off someone to connect
 their gloves, and could not see what they were seeing. This lists every headset running
-a HEXR app with HexR Remote; opening one puts what the wearer sees first, with the glove
-drawn over it as it fires, then one row to watch, record and go full screen, its gloves,
-and its scene. The numbers behind it (versions, addresses, pressures) are under Details.
+a HEXR app with HexR Remote; opening one puts what the wearer sees first, with its two
+gloves beside it, lit as they fire (click one to connect or disconnect it), then one row to
+watch, record and go full screen. A recording is exported, in the shape wanted, from the
+Recordings screen. The numbers behind it (versions, addresses, pressures) are under Details.
 
 The same thing as the phone's Headsets tab, over the same protocol (see hexr/remote.py).
 """
@@ -12,21 +13,17 @@ The same thing as the phone's Headsets tab, over the same protocol (see hexr/rem
 from __future__ import annotations
 
 import os
-import subprocess
-import sys
 import time
 import tkinter as tk
 
 from .. import recorder as REC
 from .. import remote as R
-from .. import settings
 from .. import theme as T
 from ..haptics import HapticsTimeline
 from ..headsets import Headsets, HeadsetRow
 from ..i18n import N_, tr
-from ..overlay import OverlayLook
-from ..viewer import Compositor, ViewLook
-from ..widgets import (Button, Divider, Dot, Select, StatusChip, Surface, TextLink, Tooltip,
+from ..viewer import LANDSCAPE, Compositor, GloveBadge, boxes, frame_size, hit
+from ..widgets import (Button, Divider, Dot, StatusChip, Surface, TextLink, Tooltip,
                        icon_fullscreen, icon_more)
 from .base import Screen, section_label
 from .fullview import PUMP_MS, FullView
@@ -34,14 +31,11 @@ from .fullview import PUMP_MS, FullView
 # headset | app | state | action
 COLS = (None, 220, 120, 100)
 
-VIEW_MIN, VIEW_MAX = 480, 1024   # the view's width: grows with the window, to the headset's own
-GLOVE_SIZES = ((N_("Small"), 0.26), (N_("Medium"), 0.32), (N_("Large"), 0.40))
-COMMANDS_W = 900          # the content column, less a margin
+VIEW_MIN, VIEW_MAX = 480, 1280   # the picture's width: grows with the window
 LIST_EVERY = 4            # ticks between list refreshes: 20 Hz / 4 = 5 Hz, what a headset sends
 DOTS_EVERY = 8            # ticks per step of the searching dots: 20 Hz / 8 = 0.4 s
-SAVED_SHOWN_S = 15.0      # how long "Show in folder" stays after a recording is saved
+SAVED_SHOWN_S = 15.0      # how long "Open in Recordings" stays after a recording is saved
 VIDEO_RETRY_S = 3.0       # a view that dropped while the headset still shares it: join again
-VIEW_FILE = "view.json"
 
 
 def _menu(parent) -> tk.Menu:
@@ -51,8 +45,12 @@ def _menu(parent) -> tk.Menu:
 
 
 def _popup(menu: tk.Menu, widget):
+    _popup_at(menu, widget.winfo_rootx(), widget.winfo_rooty() + widget.winfo_height())
+
+
+def _popup_at(menu: tk.Menu, x: int, y: int):
     try:
-        menu.tk_popup(widget.winfo_rootx(), widget.winfo_rooty() + widget.winfo_height())
+        menu.tk_popup(x, y)
     finally:
         menu.grab_release()
 
@@ -251,8 +249,8 @@ class HeadsetsScreen(Screen):
 
 
 class _Detail(tk.Frame):
-    """The opened headset: its view first, then watch / record / full screen, its gloves,
-    and its scene. The numbers are under Details."""
+    """The opened headset: its view with its gloves beside it, then watch / record / full
+    screen, then release and recenter. The numbers are under Details."""
 
     def __init__(self, parent, screen: HeadsetsScreen, key: str):
         super().__init__(parent, bg=T.SURFACE)
@@ -262,9 +260,6 @@ class _Detail(tk.Frame):
         self.key = key
         self.video: R.VideoReceiver | None = None
         self._photo = None
-        self._blank: tk.PhotoImage | None = None
-        self._scene_names: list[tuple[int, str]] = []
-        self._command_ids: list[str] = []
         self._title = ""
         self._nickname = ""
         self._manual = False
@@ -284,19 +279,22 @@ class _Detail(tk.Frame):
                                hover_fill=T.INSET, hover_fg=T.TEXT, hover_border=T.BORDER)
         self.more_btn.pack(side="left", padx=(8, 0))
 
-        # -- the picture, always there: what the wearer sees, or what is happening instead
-        self.look = _load_look()
+        # -- the picture, always there: what the wearer sees, or what is happening instead,
+        # with the two gloves beside it. The video thread draws it while there is a view; the
+        # screen's tick draws it, gloves only, while there is not: two compositors, one each.
         self.timeline = self.model.haptics(key) or HapticsTimeline()
-        self.compositor = Compositor(self.timeline, self.look)
-        self.screen = tk.Label(self, bg=T.CANVAS, bd=0, fg=T.TEXT_2, font=T.font(14),
-                               compound="center", cursor="hand2")
+        self.compositor = Compositor(self.timeline)
+        self._idle = Compositor(self.timeline)
+        self.screen = tk.Label(self, bg=T.SURFACE, bd=0, cursor="hand2")
         self.screen.pack(anchor="w", pady=(12, 0))
         self.screen.bind("<ButtonPress-1>", self._picture_press)
-        self.screen.bind("<B1-Motion>", lambda e: self._drag_frame("move", e.y))
-        self.screen.bind("<ButtonRelease-1>", lambda e: self._drag_frame("end", e.y))
-        self.screen.bind("<Double-Button-1>", lambda e: self._open_full())
-        Tooltip(self.screen, lambda: tr("Drag the picture up or down to frame it.")
-                if self.video and self.look.landscape else "")
+        self.screen.bind("<Double-Button-1>", self._picture_double)
+        Tooltip(self.screen, self._picture_hint)
+        # What is happening instead of the view, in the middle of its square. A sibling placed
+        # over the picture, not a child of it: the picture repaints over its own children.
+        self.say = tk.Label(self, text="", bg=T.RAISED, fg=T.TEXT_2, font=T.font(13.5),
+                            justify="center")
+        self.say.bind("<ButtonPress-1>", self._picture_press)
 
         # -- watch, record, full screen, view options, and a word for the state
         bar = tk.Frame(self, bg=T.SURFACE)
@@ -313,49 +311,28 @@ class _Detail(tk.Frame):
                                hover_fg=T.ACCENT, hover_border=T.ACCENT)
         self.full_btn.pack(side="left", padx=(10, 0))
         Tooltip(self.full_btn, tr("Full screen"))
-        self.options_btn = Button(bar, "", icon=icon_more, command=self._view_menu,
-                                  fill=T.INSET, fg=T.TEXT, border=T.BORDER, hover_fill=T.INSET,
-                                  hover_fg=T.ACCENT, hover_border=T.ACCENT)
-        self.options_btn.pack(side="left", padx=(10, 0))
-        Tooltip(self.options_btn, tr("View"))
         self.state_chip = StatusChip(bar, "")
         self.state_chip.pack(side="left", padx=(14, 0))
-        self.saved_link = TextLink(bar, "✓ " + tr("Show in folder"), command=self._show_recording,
-                                   fg=T.SUCCESS, hover=T.TEXT)
+        self.saved_link = TextLink(bar, "✓ " + tr("Open in Recordings"),
+                                   command=self._open_recording, fg=T.SUCCESS, hover=T.TEXT)
         self.notice = tk.Label(self, text="", bg=T.SURFACE, fg=T.DANGER, font=T.font(12.5),
                                anchor="w", justify="left", wraplength=720)
 
-        # -- its gloves
-        gloves = tk.Frame(self, bg=T.SURFACE)
-        gloves.pack(fill="x", pady=(14, 0))
-        self.chips = {}
-        for hand in R.HANDS:
-            chip = StatusChip(gloves, tr("{hand} glove", hand=tr(hand.capitalize())),
-                              command=lambda e, h=hand: self._glove_clicked(h, e))
-            chip.pack(side="left", padx=(0, 8))
-            Tooltip(chip, lambda h=hand: self._glove_hint(h))
-            self.chips[hand] = chip
-        Button(gloves, tr("Release all"), command=lambda: self.model.release(key), height=32,
+        # -- vent both gloves, and put the wearer back on the scene's starting spot
+        actions = tk.Frame(self, bg=T.SURFACE)
+        actions.pack(fill="x", pady=(14, 0))
+        Button(actions, tr("Release all"), command=lambda: self.model.release(key), height=34,
                fill=T.SURFACE, fg=T.TEXT_2, border=T.BORDER, hover_fill=T.INSET,
                hover_fg=T.ACCENT, hover_border=T.ACCENT, padx=14,
-               font=T.font(12.5, 600)).pack(side="left", padx=(6, 0))
-
-        # -- its scene, recentering, and the app's own commands
-        scene = tk.Frame(self, bg=T.SURFACE)
-        scene.pack(fill="x", pady=(14, 0))
-        self.scene_select = Select(scene, [""], value="", label=tr("Scene"),
-                                   command=self._scene_picked)
-        self._picked_at = 0.0
-        self.recenter_btn = Button(scene, tr("Recenter"), command=self._recenter, height=34,
+               font=T.font(12.5, 600)).pack(side="left")
+        self.recenter_btn = Button(actions, tr("Recenter"), command=self._recenter, height=34,
                                    fill=T.INSET, fg=T.TEXT, border=T.BORDER,
                                    hover_fill=T.ACCENT, hover_fg=T.CANVAS,
                                    hover_border=T.ACCENT, min_width=110)
-        self.recenter_btn.pack(side="left")
+        self.recenter_btn.pack(side="left", padx=(10, 0))
         Tooltip(self.recenter_btn, lambda: "" if self._can_recenter() else
                 tr("Needs HexR 0.11.0 with Allow Recenter."))
         self._recentered_at = 0.0
-        self.commands = tk.Frame(self, bg=T.SURFACE)
-        self.commands.pack(fill="x", pady=(10, 0))
 
         # -- Details: the numbers
         self.numbers = tk.Label(self, text="", bg=T.SURFACE, fg=T.TEXT_FAINT, font=T.mono(11),
@@ -371,7 +348,6 @@ class _Detail(tk.Frame):
         self._saving: REC.Recorder | None = None
         self._saved: REC.Recorder | None = None
         self._saved_at = 0.0
-        self._drag: tuple[int, float] | None = None
         self._last_r: HeadsetRow | None = None
         self.show_details(screen.details)
 
@@ -386,51 +362,17 @@ class _Detail(tk.Frame):
         if not self.rename_box.winfo_manager():
             self.title.configure(text=r.title)
 
-        for hand, chip in self.chips.items():
-            g = s.gloves.get(hand) if s else None
-            chip.set(tr("{hand} glove", hand=tr(hand.capitalize())), _glove_colour(g)
-                     if g and g.state != "disconnected" else None)
-
-        if s and s.expose_scenes and s.scenes:
-            if not self.scene_select.winfo_manager():
-                self.scene_select.pack(side="left", padx=(0, 10), before=self.recenter_btn)
-            if s.scenes != self._scene_names:
-                self._scene_names = s.scenes
-                self.scene_select.set(values=[n for _i, n in s.scenes])
-            current = next((n for i, n in s.scenes if i == s.scene_index), s.scene_name)
-            # A scene just picked takes a moment to load; until then the headset still reports
-            # the old one, and showing that would look like the pick did not take.
-            recently_picked = time.monotonic() - self._picked_at < 4.0
-            if current and self.scene_select.value != current and not recently_picked:
-                self.scene_select.set(value=current)
-        elif self.scene_select.winfo_manager():
-            self.scene_select.pack_forget()
+        # What the gloves' panels say. A new tuple, never a changed one: the video and the
+        # recording threads read it.
+        badges = tuple((h, GloveBadge(g.state, g.battery_pct)) for h in R.HANDS
+                       if s and (g := s.gloves.get(h)))
+        if badges != self.compositor.badges:
+            self.compositor.badges = self._idle.badges = badges
 
         usable = bool(s and r.link == "connected" and self._can_recenter() and not s.paused)
         just = time.monotonic() - self._recentered_at < 3.0 and not r.error
         self.recenter_btn.set(disabled=not usable, glyph="✓" if just else "",
                               fg=T.SUCCESS if just else T.TEXT)
-
-        ids = [c[0] for c in s.commands] if s else []
-        if ids != self._command_ids:
-            self._command_ids = ids
-            for w in self.commands.winfo_children():
-                w.destroy()
-            # An app can register many commands (the Sandbox has one per demo), so they flow
-            # onto as many rows as they need instead of running off the right edge.
-            x = y = 0
-            for cid, label in (s.commands if s else []):
-                btn = Button(self.commands, label or cid,
-                             command=lambda c=cid: self.model.run_command(self.key, c),
-                             height=30, fill=T.INSET, fg=T.TEXT, border=T.BORDER,
-                             hover_fill=T.ACCENT, hover_fg=T.CANVAS, hover_border=T.ACCENT)
-                width = btn.winfo_reqwidth()
-                if x and x + width > COMMANDS_W:
-                    x, y = 0, y + 38
-                btn.place(x=x, y=y)
-                x += width + 8
-            # place() does not size its parent, so the frame is given the rows' height.
-            self.commands.configure(height=y + 30 if ids else 1)
 
         if r.error:
             self.notice.configure(text=r.error)
@@ -474,8 +416,7 @@ class _Detail(tk.Frame):
                          (tr(" · {n} watching", n=st.viewers) if st.viewers else ""))
         if st.message:
             lines.append(st.message)
-        if self.video and self.video.state == "playing" and self.look.overlay \
-                and not self.timeline.exact:
+        if self.video and self.video.state == "playing" and not self.timeline.exact:
             lines.append(tr("The glove shows the pressure the gloves measure. Update this app to "
                             "HexR 0.10.2 or newer to show every touch and vibration as it is sent."))
         if self.video and self.video.render_error:
@@ -497,7 +438,7 @@ class _Detail(tk.Frame):
 
     # -- the gloves ---------------------------------------------------------------------------
 
-    def _glove_clicked(self, hand: str, _e=None):
+    def _glove_clicked(self, hand: str, e=None):
         s = self._last_r.status if self._last_r else None
         g = s.gloves.get(hand) if s else None
         if not s or not g or g.state == "missing" or not s.allow_glove_control or s.paused:
@@ -508,7 +449,7 @@ class _Detail(tk.Frame):
             m = _menu(self)
             m.add_command(label=tr("Disconnect"),
                           command=lambda: self.model.disconnect_glove(self.key, hand))
-            _popup(m, self.chips[hand])
+            _popup_at(m, e.x_root, e.y_root)
         elif g.state != "connecting":
             self.model.connect_glove(self.key, hand)
 
@@ -522,7 +463,10 @@ class _Detail(tk.Frame):
         hint = _this_computer_holds(self.app, g)
         word = {"connected": tr("Connected"), "connecting": tr("Connecting…"),
                 "disconnected": tr("Not connected")}.get(g.state, g.state)
-        return "\n".join(filter(None, [word, g.message if g.message != word else "", hint]))
+        click = tr("Click to disconnect") if g.connected else \
+            tr("Click to connect") if g.state == "disconnected" else ""
+        return "\n".join(filter(None, [word, g.message if g.message != word else "", hint,
+                                        click]))
 
     # -- the heading's ⋯ -----------------------------------------------------------------------
 
@@ -562,12 +506,6 @@ class _Detail(tk.Frame):
         self._recentered_at = time.monotonic()
         self.model.recenter(self.key)
 
-    def _scene_picked(self, name: str):
-        index = next((i for i, n in self._scene_names if n == name), -1)
-        if index >= 0:
-            self._picked_at = time.monotonic()
-            self.model.load_scene(self.key, index)
-
     # -- view -----------------------------------------------------------------------------------
 
     def _toggle_view(self):
@@ -585,11 +523,37 @@ class _Detail(tk.Frame):
             self._view_wanted = True
             self.model.start_view(self.key)
 
+    def _where(self, e) -> str | None:
+        """What a click is on: the view, a glove's panel, or neither."""
+        if self._photo is None:
+            return None
+        x = e.x_root - self.screen.winfo_rootx()
+        y = e.y_root - self.screen.winfo_rooty()
+        return hit((self._photo.width(), self._photo.height()), LANDSCAPE, x, y)
+
     def _picture_press(self, e):
-        if self.video and self.video.state == "playing":
-            self._drag_frame("start", e.y)
-        elif not self._view_wanted and not self._unavailable:
+        where = self._where(e)
+        if where in R.HANDS:
+            self._glove_clicked(where, e)
+        elif where == "view" and not self._view_wanted and not self._unavailable \
+                and not (self.video and self.video.state == "playing"):
             self._toggle_view()
+
+    def _picture_double(self, e):
+        if self._where(e) == "view":
+            self._open_full()
+
+    def _picture_hint(self) -> str:
+        if self._photo is None:
+            return ""
+        x = self.screen.winfo_pointerx() - self.screen.winfo_rootx()
+        y = self.screen.winfo_pointery() - self.screen.winfo_rooty()
+        where = hit((self._photo.width(), self._photo.height()), LANDSCAPE, x, y)
+        if where in R.HANDS:
+            return self._glove_hint(where)
+        if where == "view" and self.video and self.video.state == "playing":
+            return tr("Double-click for full screen")
+        return ""
 
     def _update_view(self, r: HeadsetRow):
         s = r.status
@@ -652,115 +616,58 @@ class _Detail(tk.Frame):
                 "error": (tr("Failed"), T.DANGER, tr("Sharing failed.")),
             }.get(st.state, (tr("Off"), None, tr("Watch asks the wearer to share.")))
         self.state_chip.set(word, dot)
-        if not playing:
-            self._show_placeholder(say)
+        self._say("" if playing else say)
 
-    def _show_placeholder(self, text: str):
-        w, h = self._fit
-        if self._blank is None or (self._blank.width(), self._blank.height()) != (w, h):
-            self._blank = tk.PhotoImage(master=self, width=w, height=h)
-        self._photo = None
-        self.screen.configure(image=self._blank, text=text, fg=T.TEXT_2)
+    def _say(self, text: str):
+        """The sentence in the view's square while there is no view; empty hides it."""
+        if not text:
+            if self.say.winfo_manager():
+                self.say.place_forget()
+            return
+        x0, y0, x1, y1 = boxes(frame_size(self._fit, LANDSCAPE), LANDSCAPE).view
+        self.say.configure(text=text, wraplength=int((x1 - x0) * .8))
+        self.say.place(in_=self.screen, x=(x0 + x1) // 2, y=(y0 + y1) // 2, anchor="center")
+        self.say.lift(self.screen)
 
     # -- drawing the view -------------------------------------------------------------------------
 
     def _render(self, frame, pts_us: int, arrived: float):
-        """The video thread: one frame as it is shown, framed and with the glove on top."""
+        """The video thread: one frame as it is shown, the gloves beside it."""
         return self.compositor.compose(frame, pts_us, arrived, self._fit)
 
     def _inline_fit(self) -> tuple[int, int]:
-        """The view's size in the window: as wide as the column, as tall as leaves the rows
+        """The picture's room in the window: as wide as the column, as tall as leaves the rows
         under it on screen once it is scrolled into view."""
         room = self.winfo_width() - 8 if self.winfo_ismapped() else VIEW_MIN
         view_h = self.screen_._area._canvas.winfo_height()
-        tall = max(270, min(576, view_h - 230)) if view_h > 1 else 405
-        if self.look.landscape:
-            w = int(max(VIEW_MIN, min(room, VIEW_MAX, tall * 16 / 9)))
-            return w, w * 9 // 16
-        side = int(max(360, min(room, tall, 720)))
-        return side, side
+        tall = max(270, min(720, view_h - 230)) if view_h > 1 else 405
+        return int(max(VIEW_MIN, min(room, VIEW_MAX))), tall
 
     def pump_video(self):
-        if not self.video or self.full:
+        """Every tick: the newest frame, or while there is none, the gloves as they are now."""
+        if self.full:
             return
-        image = self.video.latest()
-        if image is None:
-            return
+        if self.video and self.video.state == "playing":
+            image = self.video.latest()
+        else:
+            image = self._idle.idle(self._fit, time.monotonic())
+        if image is not None:
+            self._show(image)
+
+    def _show(self, image):
         from PIL import ImageTk
         if self._photo is None or (self._photo.width(), self._photo.height()) != image.size:
             self._photo = ImageTk.PhotoImage(image, master=self)
-            self.screen.configure(image=self._photo, text="")
+            self.screen.configure(image=self._photo)
         else:
             self._photo.paste(image)
-
-    def _view_menu(self):
-        """Frame, glove and size: set once, rarely changed, so out of the way."""
-        m = _menu(self)
-        self._frame_var = tk.StringVar(self, "16:9" if self.look.landscape else "square")
-        self._glove_var = tk.StringVar(self, "on" if self.look.overlay else "off")
-        current = min(GLOVE_SIZES, key=lambda x: abs(x[1] - self.look.glove.size))[0]
-        self._size_var = tk.StringVar(self, current)
-        m.add_command(label=tr("Frame"), state="disabled")
-        m.add_radiobutton(label="16:9", value="16:9", variable=self._frame_var,
-                          command=lambda: self._set_look(landscape=True))
-        m.add_radiobutton(label=tr("Square"), value="square", variable=self._frame_var,
-                          command=lambda: self._set_look(landscape=False))
-        m.add_separator()
-        m.add_command(label=tr("Glove"), state="disabled")
-        m.add_radiobutton(label=tr("On"), value="on", variable=self._glove_var,
-                          command=lambda: self._set_look(overlay=True))
-        m.add_radiobutton(label=tr("Off"), value="off", variable=self._glove_var,
-                          command=lambda: self._set_look(overlay=False))
-        m.add_separator()
-        m.add_command(label=tr("Size"), state="disabled")
-        for name, size in GLOVE_SIZES:
-            m.add_radiobutton(label=tr(name), value=name, variable=self._size_var,
-                              command=lambda v=size: self._set_size(v))
-        _popup(m, self.options_btn)
-
-    def _set_look(self, save: bool = True, **changes):
-        if self.recorder and changes.get("landscape", self.look.landscape) != self.look.landscape:
-            return              # a recording keeps the frame it started with: its size is fixed
-        self.look = self.look.but(**changes)
-        self.compositor.look = self.look
-        self._fit = self.full.size if self.full else self._inline_fit()
-        if save:
-            _save_look(self.look)
-
-    def _set_size(self, size: float):
-        self._set_look(glove=OverlayLook(**{**self.look.glove.__dict__, "size": size}))
-
-    def _toggle_glove(self):
-        self._set_look(overlay=not self.look.overlay)
-
-    def _drag_frame(self, phase: str, y: int, host=None):
-        """Drag the 16:9 frame up or down the square view it is cut from."""
-        if not self.look.landscape:
-            return
-        if phase == "start":
-            self._drag = (y, self.look.offset)
-        elif phase == "move" and self._drag:
-            shown = host.picture_height() if host else (self._photo.height() if self._photo else 0)
-            travel = shown * (16 / 9 - 1) / 2       # the spare height of the square, either side
-            if travel > 0:
-                y0, start = self._drag
-                self._set_look(save=False, offset=max(-1.0, min(1.0, start - (y - y0) / travel)))
-        elif phase == "end" and self._drag:
-            self._drag = None
-            _save_look(self.look)
-
-    def _nudge(self, step: float):
-        if self.look.landscape:
-            self._set_look(offset=max(-1.0, min(1.0, self.look.offset + step)))
 
     # -- full screen ------------------------------------------------------------------------------
 
     def _open_full(self):
         if self.full or not (self.video and self.video.state == "playing"):
             return
-        self.full = FullView(self, on_close=self._full_closed, on_record=self._toggle_record,
-                             on_glove=self._toggle_glove, on_nudge=self._nudge,
-                             on_drag=self._drag_frame)
+        self.full = FullView(self, on_close=self._full_closed, on_record=self._toggle_record)
         self._fit = self.full.size
         self._pump_full()
 
@@ -797,7 +704,8 @@ class _Detail(tk.Frame):
             self.notice.configure(text=tr("Recording failed: {error}", error=e))
             self.notice.pack(fill="x", pady=(8, 0), after=self.rec_btn.master)
             return
-        rec = REC.Recorder(path, self.timeline, lambda: self.look)
+        rec = REC.Recorder(path, self.timeline, lambda: self.compositor.badges,
+                           title=self._title)
         self.recorder = rec
         self._saved = None
         self.saved_link.pack_forget()
@@ -843,19 +751,9 @@ class _Detail(tk.Frame):
             if not self.notice.winfo_manager():
                 self.notice.pack(fill="x", pady=(8, 0), after=self.rec_btn.master)
 
-    def _show_recording(self):
-        if not self._saved:
-            return
-        path = os.path.normpath(self._saved.path)
-        try:
-            if sys.platform == "win32":
-                subprocess.Popen(["explorer", "/select,", path])
-            elif sys.platform == "darwin":
-                subprocess.Popen(["open", "-R", path])
-            else:
-                subprocess.Popen(["xdg-open", os.path.dirname(path)])
-        except OSError:
-            pass
+    def _open_recording(self):
+        if self._saved:
+            self.app.open_recording(self._saved.path)
 
     def _stop_video(self):
         self._stop_record()
@@ -878,23 +776,6 @@ def _clock(seconds: float) -> str:
     return f"{seconds // 60}:{seconds % 60:02d}"
 
 
-def _load_look() -> ViewLook:
-    """How the view was last set up: its frame, the glove on or off, and the glove's size."""
-    try:
-        data = settings.load(VIEW_FILE)
-        return ViewLook(landscape=bool(data.get("landscape", True)),
-                        offset=float(data.get("offset", ViewLook.offset)),
-                        overlay=bool(data.get("overlay", True)),
-                        glove=OverlayLook(size=float(data.get("gloveSize", 0.32))))
-    except (AttributeError, TypeError, ValueError):
-        return ViewLook()
-
-
-def _save_look(look: ViewLook):
-    settings.save(VIEW_FILE, {"landscape": look.landscape, "offset": round(look.offset, 3),
-                              "overlay": look.overlay, "gloveSize": look.glove.size})
-
-
 def _entry(parent, width: int) -> tk.Entry:
     return tk.Entry(parent, width=width, bg=T.INSET, fg=T.TEXT, insertbackground=T.TEXT,
                     relief="flat", highlightthickness=1, highlightbackground=T.BORDER,
@@ -908,12 +789,6 @@ def _link_look(r: HeadsetRow) -> tuple[str, str]:
     if r.status and r.status.paused:
         return T.DOT_OFF, tr("asleep")
     return T.SUCCESS, tr("ready")
-
-
-def _glove_colour(g: R.GloveState | None) -> str:
-    if g is None or g.state in ("disconnected", "missing"):
-        return T.DOT_OFF
-    return T.SUCCESS if g.connected else T.ACCENT
 
 
 def _this_computer_holds(app, g: R.GloveState) -> str:

@@ -2,12 +2,10 @@
 
 It opens on a second display when there is one (the projector or TV at an event), so the
 facilitator keeps the app on the laptop's own screen; with one display it covers that. Only the
-picture shows, with the glove on top if it is on. Keys work while it has focus:
+picture shows: the view, with the gloves beside it. Keys work while it has focus:
 
     Esc, F11 or a double-click   leave full screen
     R                            start or stop recording
-    G                            the glove on or off
-    ↑ ↓, or drag the picture     move a 16:9 frame up or down
 
 The recording dot in the corner is on the screen only; the recording itself is the picture.
 """
@@ -69,7 +67,7 @@ def pick_display(root: tk.Misc) -> tuple[int, int, int, int]:
 class FullView(tk.Toplevel):
     """The full-screen picture. The detail view feeds it frames and is told what keys do."""
 
-    def __init__(self, master, on_close, on_record, on_glove, on_nudge, on_drag):
+    def __init__(self, master, on_close, on_record):
         super().__init__(master, bg="black")
         self.overrideredirect(True)
         x, y, w, h = pick_display(master.winfo_toplevel())
@@ -78,12 +76,11 @@ class FullView(tk.Toplevel):
         self.attributes("-topmost", True)
         self._on_close = on_close
         self._photo: ImageTk.PhotoImage | None = None
-        self.picture = tk.Label(self, bg="black", bd=0, cursor="fleur")
+        self.picture = tk.Label(self, bg="black", bd=0)
         self.picture.place(relx=0.5, rely=0.5, anchor="center")
         self.rec = tk.Label(self, text="", bg="black", fg=T.DANGER, font=T.font(14, 600))
         self.hint = tk.Label(self, bg="#16171A", fg=T.TEXT_2, font=T.font(13), padx=16, pady=8,
-                             text=tr("Esc to leave full screen · R to record · G for the glove "
-                                     "· drag to frame"))
+                             text=tr("Esc to leave full screen · R to record"))
         self.hint.place(relx=0.5, rely=1.0, y=-40, anchor="s")
         self._hint_until = time.monotonic() + HINT_S
 
@@ -91,13 +88,6 @@ class FullView(tk.Toplevel):
             self.bind(key, lambda e: self.close())
         self.bind("<KeyPress-r>", lambda e: on_record())
         self.bind("<KeyPress-R>", lambda e: on_record())
-        self.bind("<KeyPress-g>", lambda e: on_glove())
-        self.bind("<KeyPress-G>", lambda e: on_glove())
-        self.bind("<Up>", lambda e: on_nudge(-0.1))
-        self.bind("<Down>", lambda e: on_nudge(0.1))
-        self.picture.bind("<ButtonPress-1>", lambda e: on_drag("start", e.y, self))
-        self.picture.bind("<B1-Motion>", lambda e: on_drag("move", e.y, self))
-        self.picture.bind("<ButtonRelease-1>", lambda e: on_drag("end", e.y, self))
         self.picture.bind("<Double-Button-1>", lambda e: self.close())
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.after(50, self._grab_focus)
@@ -125,9 +115,6 @@ class FullView(tk.Toplevel):
             self.rec.place(x=24, y=18)
         else:
             self.rec.place_forget()
-
-    def picture_height(self) -> int:
-        return self._photo.height() if self._photo else self.size[1]
 
     def close(self):
         if self._on_close:

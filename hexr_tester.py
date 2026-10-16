@@ -20,6 +20,7 @@ from hexr.engine import Engine
 from hexr.headsets import Headsets
 from hexr.screens.connect import ConnectScreen
 from hexr.screens.headsets import HeadsetsScreen
+from hexr.screens.recordings import RecordingsScreen
 from hexr.screens.quicktest import QuickTestScreen
 from hexr.screens.test import TestScreen
 from hexr.shell import NAV_OF, Shell
@@ -65,6 +66,7 @@ class App:
             "test": TestScreen(self.shell.content, self),
             "quicktest": QuickTestScreen(self.shell.content, self),
             "headsets": HeadsetsScreen(self.shell.content, self),
+            "recordings": RecordingsScreen(self.shell.content, self),
         }
         for key, screen in self.screens.items():
             self.shell.register(key, screen)
@@ -91,6 +93,11 @@ class App:
             self.open_panel(panel)
         else:
             self.navigate(NAV_OF.get(where, where))
+
+    def open_recording(self, path: str):
+        """A recording just saved on the Headsets screen, opened for exporting."""
+        self.navigate("recordings")
+        self.screens["recordings"].open(path)
 
     # -- glove actions -------------------------------------------------------
 

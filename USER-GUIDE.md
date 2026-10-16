@@ -81,11 +81,12 @@ You do **not** pair the glove in Windows Bluetooth settings. Leave those alone
 
 ---
 
-## Two places: Test and Headsets
+## Three places: Test, Headsets and Recordings
 
-The rail on the left has two entries. **Test** is this computer's own gloves,
+The rail on the left has three entries. **Test** is this computer's own gloves,
 over its Bluetooth. **Headsets** is the HEXR headsets on the network, at an
-event. Everything below up to Safety is Test.
+event. **Recordings** is what you recorded from a headset, made into videos to
+share. Everything below up to The window is Test.
 
 ## Test · connecting a glove
 
@@ -262,56 +263,50 @@ remembers the choice the next time it opens.
 ## Headsets
 
 At an event, the headsets running a HEXR app can be looked after from here
-without taking one off anyone: connect and disconnect their gloves, recenter
-the wearer, change the scene, run the app's own commands, and watch what the
-wearer sees.
+without taking one off anyone: watch what the wearer sees and feels, connect
+and disconnect their gloves, recenter the wearer, and record it all.
 
 A headset shows up when its app was built with **HexR 0.10.0 or newer with
 HexR Remote added**, it is on the **same network** as this computer, and the
 app is open. The list searches by itself. A headset shows *Asleep* while nobody
 is wearing it, and refuses commands until someone puts it on.
 
-Click a headset (or its **Open**) to open it below the list: its view first,
-then its gloves, its scene and its commands.
+Click a headset (or its **Open**) to open it below the list. The picture comes
+first: the wearer's view, square and whole, with a panel for each glove beside
+it, left hand above right.
 
 - **Watch** — the wearer is asked in the headset to allow sharing their view;
-  once they do, it appears in the picture. Clicking the picture does the same.
-  Until then the picture says what is happening (waiting for the wearer, they
-  said no, asleep). **Stop watching** leaves the view running for anyone else
-  still watching it. The chip beside the buttons is the view's state in a word.
-- **Gloves** — a chip per glove, green when the headset has it. Click a grey one
-  to connect it; a green one offers **Disconnect**. The headset does the connecting,
-  over its own Bluetooth. A glove talks to one thing at a time, so if this
-  computer (or a phone) has it, disconnect it there first. **Release all**
-  beside them vents both.
-- **Scene** — pick one and the headset switches to it.
+  once they do, it appears in the square. Clicking the square does the same.
+  Until then it says what is happening (waiting for the wearer, they said no,
+  asleep). **Stop watching** leaves the view running for anyone else still
+  watching it. The chip beside the buttons is the view's state in a word.
+- **The gloves' panels** — each glove lights up where the wearer is being
+  touched: pressure glows and holds, a vibration sends out rings, the finger is
+  named while one or two fire, and a caption reads *Press. Hold. Release.* or
+  *Pulse. Buzz. Click.*, so an audience can see what the haptics are doing. The
+  panel's corner says whether the headset has that glove (*Connected*,
+  *Connecting*, *Not connected*) and its battery, amber under 20%; a glove that
+  is not connected shows faintly. Apps built with **HexR 0.10.2 or newer** send
+  every touch and vibration as it happens, lined up with the picture; with an
+  older app the glove follows the pressure the gloves measure, which shows a
+  press or a hold but not a vibration.
+- **Connect or disconnect a glove** — click its panel. A glove that is not
+  connected connects; a connected one offers **Disconnect**. The headset does
+  the connecting, over its own Bluetooth. A glove talks to one thing at a time,
+  so if this computer (or a phone) has it, disconnect it there first.
+- **Release all** vents both gloves.
 - **Recenter** — puts the wearer back on the scene's starting spot, facing its
   front, for someone who has wandered off or was handed the headset facing the
   wrong way. Works on Quest and PICO alike. A tick shows it worked. The app
   needs **HexR 0.11.0 or newer**; on an older one the button is greyed out.
-- **The app's own commands** sit beside Recenter, as buttons.
-- **The glove on the view** — a HEXR glove in the corner of the picture lights
-  up where the wearer is being touched: pressure glows and holds, a vibration
-  sends out rings, and a caption reads *Press. Hold. Release.* or *Pulse. Buzz.
-  Click.*, so an audience can see what the haptics are doing. Turn it off, or
-  change its size, from the **⋯** menu beside the buttons. Apps built with
-  **HexR 0.10.2 or newer**
-  send every touch and vibration as it happens, lined up with the picture; with
-  an older app the glove follows the pressure the gloves measure, which shows a
-  press or a hold but not a vibration.
-- **Frame** — in the **⋯** menu. The headset sends a square view. **16:9** cuts
-  a widescreen band from it for a TV or a video; drag the picture up or down to
-  choose which band (hands are usually low in the view). **Square** shows all of
-  it.
-- **Record** — saves the view as you see it, glove included, as an MP4 in
-  *Videos\HEXR Companion*. While it records the button shows the time; when it
-  stops, **Show in folder** opens the file. With a HexR 0.10.2 app a
-  *.haptics.json* is saved beside it, which HexR Overlay Studio opens to restyle
-  the glove afterwards.
-- **Full screen** — the **⛶** button. The view alone, on a second display if one
-  is connected (a projector or TV), or on this one. **Esc** leaves, **R**
-  records, **G** turns the glove on or off, and dragging or the arrow keys move
-  a 16:9 frame.
+- **Record** — records the view and what the gloves did, in
+  *Videos\HEXR Companion\Recordings*. While it records the button shows the
+  time; when it stops, **Open in Recordings** takes you to it, to export it as
+  a video (below). With a HexR 0.10.2 app a *.haptics.json* is saved beside it
+  too, which HexR Overlay Studio opens.
+- **Full screen** — the **⛶** button, or double-click the view. The picture
+  alone, on a second display if one is connected (a projector or TV), or on
+  this one. **Esc** leaves and **R** records.
 - **Rename** — in the **⋯** beside the headset's name: call it *Station 1* or
   similar. Headsets of one model all report the same name, so this is how you
   tell them apart. The name is kept on this computer. **Forget** is there too.
@@ -325,6 +320,30 @@ devices seeing each other; press **+ Add by address** under the list, type the
 headset's IP address and press **Add** instead, or bring your own router.
 
 On a Mac the Headsets screen controls headsets but cannot show their view yet.
+
+---
+
+## Recordings
+
+Every recording made on the Headsets screen, newest first, ready to make into a
+video to share.
+
+1. **Pick a recording** in the list.
+2. **Pick a shape.** The preview shows it, at the moment the gloves were
+   busiest.
+
+   | Shape | Size | For |
+   |---|---|---|
+   | **Landscape** | 1920 × 1080 | YouTube, a TV: the view, the gloves to its right |
+   | **Portrait** | 1080 × 1920 | YouTube Shorts, phones: the view, the gloves under it |
+   | **Square** | 1080 × 1080 | The view alone, no gloves |
+
+3. **Export.** A minute of recording takes about a minute and a half. **Stop**
+   cancels it. The video goes in *Videos\HEXR Companion\Exports*, named after
+   the recording and its shape; **Exported · Show in folder** finds it.
+
+The same recording can be exported in every shape, as often as you like.
+**Open folder** opens *Videos\HEXR Companion*.
 
 ---
 
@@ -367,6 +386,7 @@ exactly what the glove exposes and sends. Run it with the app closed.
 
 - It does not track your hand. HEXR provides touch; hand tracking comes from a
   headset or an external tracker.
-- It does not record or export sessions.
+- It does not record what happens on the Test screen; recording is for a
+  headset's view.
 - It does not carry the authored effect presets from the Unity package.
 - It is not needed to use HEXR in an application.

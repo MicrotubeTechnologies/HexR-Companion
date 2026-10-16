@@ -91,7 +91,6 @@ ZH: dict[str, str] = {
     # -- gloves, wherever they appear
     "Left": "左手",
     "Right": "右手",
-    "{hand} glove": "{hand}手套",
     "Thumb": "拇指",
     "Index": "食指",
     "Middle": "中指",
@@ -174,9 +173,7 @@ ZH: dict[str, str] = {
     "No glove handler in this app": "此应用没有手套处理程序",
     "This computer has a glove for this hand; disconnect it here first.":
         "这台电脑已连接这只手的手套，请先在这里断开。",
-    "Scene": "场景",
     "Recenter": "重新定位",
-    "View": "画面",
     "Watch": "观看",
     "Stop watching": "停止观看",
     "This app does not share its view.": "此应用不共享画面。",
@@ -187,17 +184,8 @@ ZH: dict[str, str] = {
     "Connecting to the view…": "正在连接画面…",
     "Record": "录制",
     "Full screen": "全屏",
-    "Frame": "画幅",
     "Square": "方形",
-    "Glove": "手套",
-    "On": "开",
     "Off": "关",
-    "Size": "大小",
-    "Small": "小",
-    "Medium": "中",
-    "Large": "大",
-    "Drag the picture up or down to frame it.": "上下拖动画面即可调整取景。",
-    "Show in folder": "在文件夹中显示",
     "The glove could not be drawn: {error}": "无法绘制手套：{error}",
     "The glove shows the pressure the gloves measure. Update this app to HexR 0.10.2 or newer to "
     "show every touch and vibration as it is sent.":
@@ -209,8 +197,6 @@ ZH: dict[str, str] = {
     "Recording failed: {error}": "录制失败：{error}",
     "No frames arrived while recording.": "录制期间没有收到画面。",
     "This build has no video encoder.": "此版本没有视频编码器。",
-    "Esc to leave full screen · R to record · G for the glove · drag to frame":
-        "Esc 退出全屏 · R 录制 · G 显示或隐藏手套 · 拖动调整取景",
     "Cannot listen for headsets on UDP {port}: {error}": "无法在 UDP {port} 端口上搜索头显：{error}",
     "This build cannot show a headset's view: it was made without PyAV.":
         "此版本无法显示头显画面：构建时没有包含 PyAV。",
@@ -262,4 +248,26 @@ ZH: dict[str, str] = {
     "Watch asks the wearer to share.": "点击“观看”会请佩戴者共享画面。",
     "Saving…": "正在保存…",
     "Needs HexR 0.11.0 with Allow Recenter.": "需要 HexR 0.11.0 并开启 Allow Recenter。",
+
+    # -- recordings, and the gloves beside the view
+    "Esc to leave full screen · R to record": "按 Esc 退出全屏 · 按 R 录制",
+    "Open in Recordings": "在录像中打开",
+    "Click to disconnect": "点击断开",
+    "Click to connect": "点击连接",
+    "Double-click for full screen": "双击全屏",
+    "Loading…": "加载中…",
+    "Export failed: {error}": "导出失败：{error}",
+    "Exporting… {pct}%": "正在导出… {pct}%",
+    "Export again": "再次导出",
+    "Export": "导出",
+    "Exporting another recording…": "正在导出另一段录像…",
+    "Exported · Show in folder": "已导出 · 在文件夹中显示",
+    "No preview": "无预览",
+    "Landscape": "横屏",
+    "Portrait": "竖屏",
+    "Recordings": "录像",
+    "Open folder": "打开文件夹",
+    "No recordings yet": "还没有录像",
+    "Record a headset's view in Headsets.": '在“头显”中录制头显画面。',
+    "Go to Headsets": "前往头显",
 }
