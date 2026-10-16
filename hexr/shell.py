@@ -24,11 +24,12 @@ import ctypes
 import os
 import sys
 import tkinter as tk
+import webbrowser
 
 from . import i18n
 from . import theme as T
 from .i18n import N_, tr
-from .widgets import (Button, GlovesButton, IconButton, NavRow, StatusPill,
+from .widgets import (GlovesButton, IconButton, NavRow, TextLink, Tooltip,
                       paint_maximise, paint_restore)
 
 MAC = sys.platform == "darwin"
@@ -36,9 +37,11 @@ MAC = sys.platform == "darwin"
 # Two jobs, two places: this computer's own gloves (Test), and the HEXR
 # headsets on the network (Headsets). Connecting and the quick test are both on
 # the way to testing a glove, so they live under Test rather than beside it:
-# Test is the scan until a glove connects, and then the header carries a Quick
-# test button and a Gloves button that open them as panels.
-STEPS = [("01", N_("Test"), "test"), ("02", N_("Headsets"), "headsets")]
+# Test is connecting until a glove connects, the Quick test is a button on Test,
+# and the header's glove status opens the gloves from anywhere.
+STEPS = [(N_("Test"), "test"), (N_("Headsets"), "headsets")]
+
+USER_GUIDE_URL = "https://github.com/MicrotubeTechnologies/HexR-Companion/blob/main/USER-GUIDE.md"
 
 # Screens that belong to a rail entry without being it.
 NAV_OF = {"connect": "test", "quicktest": "test"}
@@ -56,18 +59,15 @@ def _hwnd_of(widget) -> int:
 
 
 class Shell:
-    def __init__(self, root: tk.Tk, on_nav=None, on_quick_test=None, on_gloves=None,
-                 on_language=None):
+    def __init__(self, root: tk.Tk, on_nav=None, on_gloves=None, on_language=None):
         self.root = root
         # A rail click goes through the app, which knows whether Test is the
         # scan or the controls right now.
         self.on_nav = on_nav
-        self.on_quick_test = on_quick_test
         self.on_gloves = on_gloves
         self.on_language = on_language
         self.screen = "test"
         self._screens: dict[str, tk.Frame] = {}
-        self._actions_shown = False
         # Where the window sits when it is not filling the screen. Restored
         # verbatim, so maximising and unmaximising is lossless.
         self._normal: tuple[int, int, int, int] | None = None
@@ -84,6 +84,7 @@ class Shell:
         else:
             root.overrideredirect(True)
         root.update_idletasks()
+        self._fit_screen()
         self._centre()
         self._apply_win32()
         self._build()
@@ -100,7 +101,6 @@ class Shell:
         for w in self.root.winfo_children():
             w.destroy()
         self._screens.clear()
-        self._actions_shown = False
         self._build()
         if self.maximised and not MAC:
             self.max_btn.set_painter(paint_restore)
@@ -138,6 +138,15 @@ class Shell:
             return tk.PhotoImage(file=path)
         except tk.TclError:
             return None
+
+    def _fit_screen(self):
+        """Never taller than the screen's usable area: a laptop at 150% scaling has 720
+        points, less than the design's 742, and a window past the taskbar hides its
+        bottom edge."""
+        _x, _y, ww, wh = self._work_area()
+        if wh < self._win_h:
+            self._win_h = wh
+        self.root.minsize(min(T.WIN_W, ww), self._win_h)
 
     def _centre(self):
         w, h = T.WIN_W, self._win_h
@@ -283,8 +292,6 @@ class Shell:
             from .widgets import draw_round
             draw_round(mark, 0, 0, 11, 11, 3, T.ACCENT)
             mark.pack(side="left")
-        tk.Label(left, text="HEXR Companion", bg=T.RAISED, fg=T.TEXT_2,
-                 font=T.font(12.5)).pack(side="left", padx=(9, 0))
 
         right = tk.Frame(bar, bg=T.RAISED)
         right.pack(side="right", padx=(0, 6))
@@ -331,39 +338,20 @@ class Shell:
         h.pack_propagate(False)
         self.header = h
 
-        # The wordmark is one line, with the company credit tucked under it.
-        # The two halves used to sit 10px apart, which read as two separate
-        # words rather than one product name; a single space between them is
-        # what the eye expects, so the gap is now the space character's own
-        # width and nothing more.
-        mark = tk.Frame(h, bg=T.SURFACE)
-        mark.pack(side="left", padx=(22, 0))
-        word = tk.Frame(mark, bg=T.SURFACE)
-        word.pack(anchor="w")
+        # The wordmark is one line: a single space between the halves is what
+        # the eye expects of one product name.
+        word = tk.Frame(h, bg=T.SURFACE)
+        word.pack(side="left", padx=(22, 0))
         tk.Label(word, text="HEXR", bg=T.SURFACE, fg=T.ACCENT,
                  font=T.font(20, 700)).pack(side="left")
         tk.Label(word, text=" Companion", bg=T.SURFACE, fg=T.TEXT,
                  font=T.font(20, 400)).pack(side="left")
-        tk.Label(mark, text=tr("by Microtube Technologies"), bg=T.SURFACE,
-                 fg=T.TEXT_FAINT, font=T.font(10)).pack(anchor="w")
 
-        right = tk.Frame(h, bg=T.SURFACE)
-        right.pack(side="right", padx=(0, 22))
-
-        # While testing: the quick test and the gloves, as panels over the Test
-        # screen. Stopping is on the Test screen itself (Release, All off) and on
-        # Escape from anywhere, so the header no longer needs to be the panic
-        # button it once was.
-        self.actions = tk.Frame(right, bg=T.SURFACE)
-        self.gloves_btn = GlovesButton(self.actions, command=self._gloves_clicked)
-        self.gloves_btn.pack(side="right")
-        Button(self.actions, tr("Quick test"), command=self._quick_test_clicked,
-               height=34, fill=T.RAISED, fg=T.TEXT, border=T.BORDER,
-               hover_fill=T.INSET, hover_fg=T.ACCENT, hover_border=T.ACCENT,
-               padx=18, font=T.font(13, 600)).pack(side="right", padx=(0, 10))
-
-        self.status = StatusPill(right)
-        self.status.pack(side="right", padx=(0, 12))
+        # This computer's gloves, on every screen: a dot per hand and the battery.
+        # The one place their state is shown, and the way to them from anywhere.
+        self.gloves_btn = GlovesButton(h, command=self._gloves_clicked)
+        self.gloves_btn.pack(side="right", padx=(0, 22))
+        Tooltip(self.gloves_btn, tr("Gloves"))
 
         tk.Frame(self.root, bg=T.BORDER_SOFT, height=1).pack(fill="x")
 
@@ -382,28 +370,22 @@ class Shell:
         top = tk.Frame(rail, bg=T.RAIL)
         top.pack(fill="x", pady=(14, 0), padx=10)
         self.nav: dict[str, NavRow] = {}
-        for num, label, key in STEPS:
-            row = NavRow(top, num, tr(label), command=lambda k=key: self._nav_clicked(k))
+        for label, key in STEPS:
+            row = NavRow(top, tr(label), command=lambda k=key: self._nav_clicked(k))
             row.pack(fill="x", pady=1)
             self.nav[key] = row
 
         foot = tk.Frame(rail, bg=T.RAIL)
         foot.pack(side="bottom", fill="x", padx=22, pady=(0, 14))
         self._build_language(foot)
-        tk.Frame(foot, bg=T.BORDER_SOFT, height=1).pack(fill="x", pady=(0, 6))
+        tk.Frame(foot, bg=T.BORDER_SOFT, height=1).pack(fill="x", pady=(0, 8))
+        TextLink(foot, tr("Help"), command=lambda: webbrowser.open(USER_GUIDE_URL),
+                 fg=T.TEXT_MUTED, hover=T.TEXT, size=12).pack(anchor="w", pady=(0, 4))
         # Read from the VERSION file rather than a literal, so the footer, the
-        # exe's properties and the installer can never disagree. The glove
-        # reports no firmware version over BLE, so there is nothing else to
-        # show here — an empty "fw —" slot would only invite the question.
-        self.build_label = tk.Label(foot, text=tr("app {version}", version=T.app_version()),
-                                    bg=T.RAIL,
-                                    fg=T.TEXT_OFF, font=T.mono(10.5), anchor="w")
-        self.build_label.pack(fill="x", pady=(0, 7))
-        help_lbl = tk.Label(foot, text=tr("Help & docs"), bg=T.RAIL, fg=T.TEXT_MUTED,
-                            font=T.font(12), anchor="w", cursor="hand2")
-        help_lbl.pack(fill="x")
-        help_lbl.bind("<Enter>", lambda e: help_lbl.configure(fg=T.TEXT))
-        help_lbl.bind("<Leave>", lambda e: help_lbl.configure(fg=T.TEXT_MUTED))
+        # exe's properties and the installer can never disagree.
+        self.build_label = tk.Label(foot, text=f"v{T.app_version()} · Microtube Technologies",
+                                    bg=T.RAIL, fg=T.TEXT_OFF, font=T.font(10.5), anchor="w")
+        self.build_label.pack(fill="x")
 
         tk.Frame(body, bg=T.BORDER_SOFT, width=1).pack(side="left", fill="y")
 
@@ -443,6 +425,9 @@ class Shell:
     def go(self, key: str):
         if key not in self._screens:
             return
+        leaving = self._screens.get(self.screen)
+        if leaving is not None and self.screen != key and hasattr(leaving, "on_hide"):
+            leaving.on_hide()
         for k, f in self._screens.items():
             if k != key:
                 f.pack_forget()
@@ -453,35 +438,16 @@ class Shell:
         if hasattr(self._screens[key], "on_show"):
             self._screens[key].on_show()
 
-    def mark_done(self, key: str, done: bool = True):
-        if key in self.nav:
-            self.nav[key].set(done=done)
-
     # -- header state --------------------------------------------------------
 
-    def set_status(self, dot: str, text: str):
-        self.status.set(dot, text)
-
-    def set_test_actions(self, shown: bool, gloves_dot: str | None = None):
-        """Show the Quick test and Gloves buttons, while there is a glove to test."""
-        if shown != self._actions_shown:
-            self._actions_shown = shown
-            if shown:
-                self.actions.pack(side="right", before=self.status)
-            else:
-                self.actions.pack_forget()
-        if shown:
-            self.gloves_btn.set(gloves_dot)
+    def set_gloves(self, dots: dict, battery: str | None, low: bool = False):
+        self.gloves_btn.set(dots, battery, low)
 
     def _nav_clicked(self, key: str):
         if self.on_nav:
             self.on_nav(key)
         else:
             self.go(key)
-
-    def _quick_test_clicked(self):
-        if self.on_quick_test:
-            self.on_quick_test()
 
     def _gloves_clicked(self):
         if self.on_gloves:

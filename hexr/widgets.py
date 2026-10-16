@@ -188,11 +188,13 @@ class Button(tk.Canvas):
     def __init__(self, parent, text, command=None, height=34, radius=T.R_CTRL,
                  fill=T.ACCENT, fg=T.CANVAS, border=None, hover_fill=None,
                  hover_fg=None, hover_border=None, font=None, glyph=None,
-                 glyph_px=10, padx=18, gap=8, bg=None, min_width=0):
+                 glyph_px=10, padx=18, gap=8, bg=None, min_width=0, icon=None):
         bg = bg or parent.cget("bg")
         self._font = font or T.font(13, 600)
         self._glyph_font = T.font(glyph_px)
         self.text, self.glyph = text, glyph
+        # A drawn mark (icon_more, icon_fullscreen...) for the marks IBM Plex lacks.
+        self.icon = icon
         self.fill, self.fg, self.border = fill, fg, border or fill
         self.hover_fill = hover_fill or fill
         self.hover_fg = hover_fg or fg
@@ -212,9 +214,13 @@ class Button(tk.Canvas):
         self.bind("<Configure>", lambda e: self._render())
 
     def _content_width(self):
+        if self.icon and not self.text:
+            return max(self.h, self.min_width)
         w = self._font.measure(self.text) + self.padx * 2
         if self.glyph:
             w += self._glyph_font.measure(self.glyph) + self.gap
+        if self.icon:
+            w += 16 + self.gap
         return max(w, self.min_width)
 
     def _draw_width(self):
@@ -235,7 +241,15 @@ class Button(tk.Canvas):
         draw_round(self, 0, 0, w - 1, h - 1, self.radius,
                    None if fill == "transparent" else fill,
                    None if edge == "transparent" else edge)
-        if self.glyph:
+        if self.icon and not self.text:
+            self.icon(self, w / 2, h / 2, fg)
+        elif self.icon:
+            tw = self._font.measure(self.text)
+            x = (w - (16 + self.gap + tw)) / 2
+            self.icon(self, x + 8, h / 2, fg)
+            self.create_text(x + 16 + self.gap, h / 2, text=self.text, fill=fg,
+                             anchor="w", font=self._font)
+        elif self.glyph:
             gw = self._glyph_font.measure(self.glyph)
             tw = self._font.measure(self.text)
             x = (w - (gw + self.gap + tw)) / 2
@@ -263,7 +277,9 @@ class Button(tk.Canvas):
 
     def set(self, text=None, fill=None, fg=None, border=None, hover_fill=None,
             hover_fg=None, hover_border=None, glyph=None, disabled=None,
-            command=None):
+            command=None, icon=None):
+        if icon is not None:
+            self.icon = icon or None
         if text is not None:
             self.text = text
         if fill is not None:
@@ -333,31 +349,35 @@ class IconButton(tk.Canvas):
 
 
 class GlovesButton(tk.Canvas):
-    """The header's way to the gloves while testing: the Bluetooth rune, "Gloves",
-    and a dot for how they are (green connected, orange scanning or connecting).
+    """The header's one word on this computer's gloves: the Bluetooth rune, a dot
+    per hand and the battery, "ᛒ  L ●  R ●  85%". Green is connected, orange is
+    connecting or searching, grey is not there. A click goes to the gloves.
 
     The rune is drawn, not typed: U+16D2 is missing from IBM Plex, like the
     window marks below.
     """
 
-    W, H = 118, 34
+    H = 34
 
     def __init__(self, parent, command=None, bg=None):
         bg = bg or parent.cget("bg")
-        super().__init__(parent, width=self.W, height=self.H, bg=bg,
+        super().__init__(parent, width=120, height=self.H, bg=bg,
                          highlightthickness=0, bd=0, cursor="hand2")
         self.command = command
-        self._dot: str | None = None
+        self._look = None
         self._hot = False
         self._font = T.font(13, 600)
-        self._render()
+        self._mono = T.mono(12, 500)
+        self.set({}, None)
         self.bind("<Button-1>", lambda e: self.command and self.command())
         self.bind("<Enter>", lambda e: self._hover(True))
         self.bind("<Leave>", lambda e: self._hover(False))
 
-    def set(self, dot: str | None):
-        if dot != self._dot:
-            self._dot = dot
+    def set(self, dots: dict, battery: str | None, low: bool = False):
+        """`dots` maps "Left"/"Right" to a colour, or None for not there."""
+        look = (tuple(sorted(dots.items())), battery, low)
+        if look != self._look:
+            self._look = look
             self._render()
 
     def _hover(self, hot: bool):
@@ -366,19 +386,32 @@ class GlovesButton(tk.Canvas):
 
     def _render(self):
         self.delete("all")
-        draw_round(self, 0, 0, self.W - 1, self.H - 1, T.R_CTRL,
+        dots, battery, low = self._look
+        dots = dict(dots)
+        letters = [(tr("L"), dots.get("Left")), (tr("R"), dots.get("Right"))]
+        w = 34 + sum(self._font.measure(l) + 6 + 8 + 12 for l, _ in letters)
+        if battery:
+            w += self._mono.measure(battery) + 6
+        w += 8
+        self.configure(width=w)
+        draw_round(self, 0, 0, w - 1, self.H - 1, T.R_CTRL,
                    fill=T.INSET if self._hot else T.RAISED,
                    outline=T.ACCENT if self._hot else T.BORDER)
         fg = T.ACCENT if self._hot else T.TEXT
-        x, y = 15, 8
+        x, y = 13, 8
         self.create_line(x, y + 5, x + 9, y + 13, x + 4.5, y + 17, x + 4.5, y + 1,
                          x + 9, y + 5, x, y + 13, fill=fg, width=1.6,
                          capstyle="round", joinstyle="round")
-        self.create_text(34, self.H / 2, text=tr("Gloves"), anchor="w", fill=fg,
-                         font=self._font)
-        if self._dot:
-            self.create_oval(self.W - 20, 13, self.W - 12, 21, fill=self._dot,
-                             outline=self._dot)
+        x = 34
+        for letter, colour in letters:
+            self.create_text(x, self.H / 2, text=letter, anchor="w", fill=fg, font=self._font)
+            x += self._font.measure(letter) + 6
+            c = colour or T.DOT_OFF
+            self.create_oval(x, 13, x + 8, 21, fill=c, outline=c)
+            x += 8 + 12
+        if battery:
+            self.create_text(x, self.H / 2, text=battery, anchor="w",
+                             fill=T.WARN if low else T.TEXT_2, font=self._mono)
 
 
 def paint_maximise(c: IconButton, fg: str, bg: str):
@@ -398,29 +431,6 @@ def paint_restore(c: IconButton, fg: str, bg: str):
                        outline=fg, width=1.3)
     c.create_rectangle(x - s - 2.5, y - s + 2.5, x + s - 2.5, y + s + 2.5,
                        outline=fg, width=1.3, fill=bg)
-
-
-class StatusPill(tk.Canvas):
-    """34 px pill: a status dot plus mono text. Header status indicator."""
-
-    def __init__(self, parent, bg=None):
-        bg = bg or parent.cget("bg")
-        super().__init__(parent, height=34, bg=bg, highlightthickness=0, bd=0)
-        self._font = T.mono(11.5)
-        self._bg = bg
-        self.set(T.DOT_OFF, "no device")
-
-    def set(self, dot, text):
-        if (dot, text) == (getattr(self, "dot", None), getattr(self, "text", None)):
-            return                      # called on the UI tick; skip no-op redraws
-        self.dot, self.text = dot, text
-        w = 13 + 7 + 8 + self._font.measure(text) + 13
-        self.configure(width=w)
-        self.delete("all")
-        draw_round(self, 0, 0, w - 1, 33, 17, T.RAISED, T.BORDER)
-        self.create_oval(13, 13.5, 20, 20.5, fill=dot, width=0)
-        self.create_text(28, 17, text=text, fill=T.TEXT_2, anchor="w",
-                         font=self._font)
 
 
 class Select(tk.Canvas):
@@ -501,12 +511,12 @@ class Select(tk.Canvas):
 
 
 class NavRow(tk.Canvas):
-    """One step in the left rail: number, label, and a completion tick."""
+    """One place in the left rail. Not numbered: the places are not steps."""
 
-    def __init__(self, parent, num, label, command=None, bg=T.RAIL):
+    def __init__(self, parent, label, command=None, bg=T.RAIL):
         super().__init__(parent, height=42, bg=bg, highlightthickness=0, bd=0)
-        self.num, self.label, self.command, self._bg = num, label, command, bg
-        self.active, self.done, self._hot = False, False, False
+        self.label, self.command, self._bg = label, command, bg
+        self.active, self._hot = False, False
         self.bind("<Button-1>", lambda e: self.command and self.command())
         self.bind("<Enter>", self._enter)
         self.bind("<Leave>", self._leave)
@@ -532,23 +542,13 @@ class NavRow(tk.Canvas):
         draw_round(self, 0, 0, w, 42, T.R_CTRL, bg, None)
         if self.active:
             self.create_rectangle(0, 0, 2, 42, fill=T.ACCENT, width=0)
-        self.create_text(12, 21, text=self.num, anchor="w",
-                         fill=T.ACCENT if self.active else T.TEXT_OFF,
-                         font=T.mono(11))
-        self.create_text(12 + 20 + 11, 21, text=self.label, anchor="w",
+        self.create_text(16, 21, text=self.label, anchor="w",
                          fill=T.TEXT if self.active else T.TEXT_MUTED,
-                         font=T.font(13.5, 500))
-        if self.done:
-            self.create_text(w - 12, 21, text="✓", anchor="e",
-                             fill=T.SUCCESS, font=T.font(11))
+                         font=T.font(13.5, 600 if self.active else 500))
 
-    def set(self, active=None, done=None):
-        before = (self.active, self.done)
-        if active is not None:
+    def set(self, active=None):
+        if active is not None and active != self.active:
             self.active = active
-        if done is not None:
-            self.done = done
-        if (self.active, self.done) != before:
             self.render()
 
 
@@ -1012,8 +1012,13 @@ class Progress(tk.Canvas):
 class ScrollArea(tk.Frame):
     """A vertically scrolling content region. `.body` is the scrolled frame."""
 
-    def __init__(self, parent, bg=T.SURFACE, padx=28, pady=26):
+    def __init__(self, parent, bg=T.SURFACE, padx=28, pady=26, fill_height=False):
         super().__init__(parent, bg=bg)
+        # fill_height: the body is at least as tall as the view, so a screen can grow a
+        # picture into the room there is, and only scrolls when the window is too small.
+        self._fill = fill_height
+        self._fitted = None
+        self.extra = None       # a widget under the filled part, that adds to its height
         self._canvas = tk.Canvas(self, bg=bg, highlightthickness=0, bd=0)
         self._canvas.pack(side="left", fill="both", expand=True)
         self.body = tk.Frame(self._canvas, bg=bg)
@@ -1029,6 +1034,51 @@ class ScrollArea(tk.Frame):
 
     def _on_canvas(self, e):
         self._canvas.itemconfigure(self._win, width=e.width - self._padx * 2)
+        self.refit()
+
+    def refit(self):
+        """For a filling area: as tall as the view, or as its content if that is taller."""
+        if not self._fill:
+            return
+        view = self._canvas.winfo_height() - self._pady * 2
+        extra = self.extra
+        below = extra.winfo_reqheight() if extra is not None and extra.winfo_manager() else 0
+        h = max(view + below, self.body.winfo_reqheight())
+        if h != self._fitted and view > 1:
+            self._fitted = h
+            self._canvas.itemconfigure(self._win, height=h)
+            self._canvas.configure(scrollregion=(0, 0, self._canvas.winfo_width(),
+                                                 h + self._pady * 2))
+
+    def scroll_to(self, widget):
+        """Bring `widget` to the top of the view."""
+        self.update_idletasks()
+        # The region follows the body on <Configure>, which may not have run yet: a scroll
+        # into content just built would stop at the old end.
+        self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+        total = max(1, self.body.winfo_height() + self._pady * 2)
+        y = widget.winfo_rooty() - self.body.winfo_rooty()
+        self._canvas.yview_moveto(max(0.0, y / total))
+
+    def reveal(self, widget):
+        """Scroll just enough to show all of `widget`, or its top if it is taller than the view."""
+        self.update_idletasks()
+        # The region follows the body on <Configure>, which may not have run yet: a scroll
+        # into content just built would stop at the old end.
+        region = self._canvas.bbox("all")
+        self._canvas.configure(scrollregion=region)
+        # In canvas units, where the body sits at (padx, pady).
+        top = widget.winfo_rooty() - self.body.winfo_rooty() + self._pady
+        bottom = top + widget.winfo_height() + self._pady
+        view = self._canvas.winfo_height()
+        y0 = self._canvas.canvasy(0)
+        if bottom > y0 + view:
+            y0 = bottom - view
+        y0 = min(y0, top - self._pady)
+        self._canvas.yview_moveto(max(0.0, (y0 - region[1]) / max(1, region[3] - region[1])))
+
+    def to_top(self):
+        self._canvas.yview_moveto(0.0)
 
     def _on_wheel(self, e):
         # bind_all outlives the area: one the window rebuilt without (a
@@ -1047,3 +1097,390 @@ class ScrollArea(tk.Frame):
                 self._canvas.yview_scroll(-1 * step, "units")
                 return
             w = getattr(w, "master", None)
+
+
+# -- drawn marks ----------------------------------------------------------------------------------
+# Painters for Button(icon=...): (canvas, centre x, centre y, colour). IBM Plex has no
+# glyph for these, and a box where a mark should be is worse than none.
+
+def icon_more(c, cx, cy, fg):
+    """⋯ — more things to do."""
+    for dx in (-6, 0, 6):
+        c.create_oval(cx + dx - 1.8, cy - 1.8, cx + dx + 1.8, cy + 1.8, fill=fg, width=0)
+
+
+def icon_fullscreen(c, cx, cy, fg):
+    """⛶ — four corners pulled outwards."""
+    s, k = 7, 4
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            x, y = cx + sx * s, cy + sy * s
+            c.create_line(x - sx * k, y, x, y, x, y - sy * k, fill=fg, width=1.6,
+                          capstyle="round", joinstyle="round")
+
+
+def icon_info(c, cx, cy, fg, r=7):
+    """ⓘ — the details behind a screen."""
+    c.create_oval(cx - r, cy - r, cx + r, cy + r, outline=fg, width=1.3)
+    c.create_line(cx, cy - 1, cx, cy + 3.6, fill=fg, width=1.6)
+    c.create_oval(cx - 1.1, cy - 4.4, cx + 1.1, cy - 2.2, fill=fg, width=0)
+
+
+class Tooltip:
+    """A few words for a mark or a control, after a short hover.
+
+    Bound with add="+", so the widget keeps its own hover look. `text` may be a
+    callable, asked each time, so a tooltip can say what is true now; an empty
+    answer shows nothing.
+    """
+
+    def __init__(self, widget, text, delay_ms=450):
+        self.widget, self.text, self.delay = widget, text, delay_ms
+        self._after = None
+        self._tip = None
+        widget.bind("<Enter>", self._schedule, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+
+    def _schedule(self, _e=None):
+        self._cancel()
+        self._after = self.widget.after(self.delay, self._show)
+
+    def _cancel(self):
+        if self._after:
+            try:
+                self.widget.after_cancel(self._after)
+            except tk.TclError:
+                pass
+            self._after = None
+
+    def _show(self):
+        self._after = None
+        text = self.text() if callable(self.text) else self.text
+        if not text or not self.widget.winfo_exists():
+            return
+        tip = tk.Toplevel(self.widget)
+        tip.overrideredirect(True)
+        tip.attributes("-topmost", True)
+        tk.Label(tip, text=text, bg=T.INSET, fg=T.TEXT, font=T.font(12), padx=10, pady=5,
+                 bd=0, highlightthickness=1, highlightbackground=T.BORDER,
+                 justify="left", wraplength=320).pack()
+        tip.update_idletasks()
+        x = self.widget.winfo_rootx()
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+        tip.geometry(f"+{x}+{y}")
+        self._tip = tip
+
+    def _hide(self, _e=None):
+        self._cancel()
+        if self._tip is not None:
+            try:
+                self._tip.destroy()
+            except tk.TclError:
+                pass
+            self._tip = None
+
+
+class TextLink(tk.Label):
+    """Quiet words that do something: "All", "+ Add by address", "Show in folder"."""
+
+    def __init__(self, parent, text, command=None, fg=None, hover=None, size=12.5, bg=None):
+        bg = bg or parent.cget("bg")
+        self._fg, self._hover = fg or T.TEXT_MUTED, hover or T.ACCENT
+        super().__init__(parent, text=text, bg=bg, fg=self._fg, font=T.font(size, 500),
+                         cursor="hand2", padx=2)
+        self.command = command
+        self.bind("<Button-1>", lambda e: self.command and self.command())
+        self.bind("<Enter>", lambda e: self.configure(fg=self._hover))
+        self.bind("<Leave>", lambda e: self.configure(fg=self._fg))
+
+
+class DetailsToggle(tk.Canvas):
+    """ⓘ Details: the numbers behind a screen, for whoever is debugging it.
+    Off is quiet grey; on is the accent, so it is plain that more is showing."""
+
+    H = 32
+
+    def __init__(self, parent, on_change=None, value=False, bg=None):
+        bg = bg or parent.cget("bg")
+        super().__init__(parent, height=self.H, width=1, bg=bg,
+                         highlightthickness=0, bd=0, cursor="hand2")
+        self.on_change, self.value, self._hot = on_change, value, False
+        self._font = T.font(12.5, 500)
+        self.bind("<Button-1>", lambda e: self.set(not self.value, notify=True))
+        self.bind("<Enter>", lambda e: self._hover(True))
+        self.bind("<Leave>", lambda e: self._hover(False))
+        self._render()
+
+    def _hover(self, hot):
+        self._hot = hot
+        self._render()
+
+    def set(self, value: bool, notify: bool = False):
+        self.value = value
+        self._render()
+        if notify and self.on_change:
+            self.on_change(value)
+
+    def _render(self):
+        self.delete("all")
+        text = tr("Details")
+        w = 12 + 16 + 7 + self._font.measure(text) + 12
+        self.configure(width=w)
+        on = self.value
+        fg = T.ACCENT if (on or self._hot) else T.TEXT_MUTED
+        draw_round(self, 0, 0, w - 1, self.H - 1, self.H / 2,
+                   T.ACCENT_FILL if on else (T.INSET if self._hot else T.SURFACE),
+                   T.ACCENT if on else T.BORDER)
+        icon_info(self, 12 + 8, self.H / 2, fg)
+        self.create_text(12 + 16 + 7, self.H / 2, text=text, anchor="w", fill=fg,
+                         font=self._font)
+
+
+class HoldButton(tk.Canvas):
+    """The pad: press and hold to drive the glove, let go to release it, the way a
+    hand meets an object. Space does the same while the screen has it.
+
+    `latched` turns it into a switch for longer runs: a click turns it on and the
+    next turns it off. `release()` lets go from outside (leaving the screen,
+    Escape, the window losing focus), so nothing stays pressed by accident.
+    """
+
+    def __init__(self, parent, text, on_press, on_release, height=68, bg=None):
+        bg = bg or parent.cget("bg")
+        super().__init__(parent, width=1, height=height, bg=bg,
+                         highlightthickness=0, bd=0, cursor="hand2")
+        self.text, self.on_press, self.on_release, self.h = text, on_press, on_release, height
+        self.held = self.latched = self.disabled = False
+        self.sub = ""
+        self._hot = False
+        self._key_release = None
+        self.bind("<ButtonPress-1>", lambda e: self.down())
+        self.bind("<ButtonRelease-1>", lambda e: self.up())
+        self.bind("<Enter>", lambda e: self._hover(True))
+        self.bind("<Leave>", lambda e: self._hover(False))
+        self.bind("<Configure>", lambda e: self.render())
+
+    def _hover(self, hot):
+        self._hot = hot
+        self.render()
+
+    def down(self):
+        if self.disabled:
+            return
+        if self.latched:
+            self._release() if self.held else self._press()
+        elif not self.held:
+            self._press()
+
+    def up(self):
+        if not self.latched and self.held:
+            self._release()
+
+    # Windows repeats a held key's press; X11 repeats press and release. Ignoring a
+    # press while held, and waiting a moment before acting on a release, covers both.
+    def key_down(self):
+        if self._key_release:
+            self.after_cancel(self._key_release)
+            self._key_release = None
+            return
+        if not self.held or self.latched:
+            self.down()
+
+    def key_up(self):
+        if self.latched:
+            return
+        if self._key_release:
+            self.after_cancel(self._key_release)
+        self._key_release = self.after(40, self._key_up_now)
+
+    def _key_up_now(self):
+        self._key_release = None
+        self.up()
+
+    def release(self, send: bool = True):
+        """Let go now. `send=False` when the glove has been vented some other way."""
+        if self.held:
+            self.held = False
+            self.render()
+            if send:
+                self.on_release()
+
+    def _press(self):
+        self.held = True
+        self.render()
+        self.on_press()
+
+    def _release(self):
+        self.held = False
+        self.render()
+        self.on_release()
+
+    def set(self, text=None, sub=None, disabled=None, latched=None):
+        if text is not None:
+            self.text = text
+        if sub is not None:
+            self.sub = sub
+        if disabled is not None:
+            self.disabled = disabled
+            self.configure(cursor="arrow" if disabled else "hand2")
+            if disabled:
+                self.release()
+        if latched is not None and latched != self.latched:
+            self.latched = latched
+            if not latched:
+                self.release()
+        self.render()
+
+    def render(self):
+        self.delete("all")
+        w = self.winfo_width()
+        if w <= 1:
+            return
+        if self.disabled:
+            fill, edge, fg = T.INSET, T.BORDER, T.TEXT_OFF
+        elif self.held:
+            fill, edge, fg = T.ACCENT, T.ACCENT, T.CANVAS
+        else:
+            fill = T.ACCENT_EDGE if self._hot else T.ACCENT_FILL
+            edge, fg = T.ACCENT, T.ACCENT
+        draw_round(self, 0, 0, w - 1, self.h - 1, 12, fill, edge)
+        if self.sub:
+            self.create_text(w / 2, self.h / 2 - 9, text=self.text, fill=fg, font=T.font(17, 600))
+            self.create_text(w / 2, self.h / 2 + 13, text=self.sub, fill=fg, font=T.font(11.5))
+        else:
+            self.create_text(w / 2, self.h / 2, text=self.text, fill=fg, font=T.font(17, 600))
+
+
+class StatusChip(tk.Canvas):
+    """A dot and a word: "● Left glove", "● Live". Clickable when it has a command."""
+
+    H = 32
+
+    def __init__(self, parent, text="", dot=None, command=None, bg=None):
+        bg = bg or parent.cget("bg")
+        super().__init__(parent, width=1, height=self.H, bg=bg, highlightthickness=0, bd=0)
+        self.text, self.dot, self.command, self._hot = text, dot, command, False
+        self._font = T.font(12.5, 500)
+        self.bind("<Button-1>", lambda e: self.command and self.command(e))
+        self.bind("<Enter>", lambda e: self._hover(True))
+        self.bind("<Leave>", lambda e: self._hover(False))
+        self._render()
+
+    def _hover(self, hot):
+        self._hot = hot and self.command is not None
+        self._render()
+
+    def set(self, text=None, dot=None):
+        if (text, dot) == (self.text, self.dot):
+            return
+        if text is not None:
+            self.text = text
+        self.dot = dot
+        self._render()
+
+    def _render(self):
+        self.delete("all")
+        w = 12 + 8 + 8 + self._font.measure(self.text) + 14
+        self.configure(width=w, cursor="hand2" if self.command else "arrow")
+        draw_round(self, 0, 0, w - 1, self.H - 1, self.H / 2,
+                   T.INSET if self._hot else T.RAISED, T.ACCENT if self._hot else T.BORDER)
+        c = self.dot or T.DOT_OFF
+        self.create_oval(12, self.H / 2 - 4, 20, self.H / 2 + 4, fill=c, outline=c)
+        self.create_text(28, self.H / 2, text=self.text, anchor="w",
+                         fill=T.TEXT if self.dot else T.TEXT_MUTED, font=self._font)
+
+
+class Segmented(tk.Canvas):
+    """Two or three choices side by side, one lit: Pressure | Vibration."""
+
+    H = 36
+
+    def __init__(self, parent, options, value=None, command=None, bg=None, min_width=0):
+        bg = bg or parent.cget("bg")
+        super().__init__(parent, width=1, height=self.H, bg=bg, highlightthickness=0, bd=0,
+                         cursor="hand2")
+        self.options, self.command = list(options), command
+        self.value = value if value is not None else self.options[0][0]
+        self.min_width = min_width
+        self._font = T.font(13, 600)
+        self._hot = None
+        self.bind("<Button-1>", self._click)
+        self.bind("<Motion>", self._motion)
+        self.bind("<Leave>", lambda e: self._set_hot(None))
+        self.bind("<Configure>", lambda e: self.render())
+
+    def _seg_w(self):
+        return max(self._font.measure(label) for _k, label in self.options) + 32
+
+    def _index_at(self, x):
+        w = self.winfo_width()
+        return min(len(self.options) - 1, max(0, int(x / max(1, w / len(self.options)))))
+
+    def _click(self, e):
+        key = self.options[self._index_at(e.x)][0]
+        if key != self.value:
+            self.value = key
+            self.render()
+            if self.command:
+                self.command(key)
+
+    def _motion(self, e):
+        self._set_hot(self._index_at(e.x))
+
+    def _set_hot(self, i):
+        if i != self._hot:
+            self._hot = i
+            self.render()
+
+    def set(self, value):
+        if value != self.value:
+            self.value = value
+            self.render()
+
+    def render(self):
+        self.delete("all")
+        want = max(self.min_width, self._seg_w() * len(self.options))
+        if int(self.cget("width")) != want:
+            self.configure(width=want)
+        w = max(self.winfo_width(), 2)
+        if w <= 2:
+            w = want
+        draw_round(self, 0, 0, w - 1, self.H - 1, T.R_CTRL, T.INSET, T.BORDER)
+        seg = w / len(self.options)
+        for i, (key, label) in enumerate(self.options):
+            on = key == self.value
+            x0 = i * seg
+            if on:
+                draw_round(self, x0 + 3, 3, x0 + seg - 4, self.H - 4, T.R_CTRL - 1,
+                           T.ACCENT_FILL, T.ACCENT)
+            fg = T.ACCENT if on else (T.TEXT if self._hot == i else T.TEXT_MUTED)
+            self.create_text(x0 + seg / 2, self.H / 2, text=label, fill=fg, font=self._font)
+
+
+class SignalBars(tk.Canvas):
+    """How strong a glove's radio is, as four bars rather than dBm."""
+
+    def __init__(self, parent, bg=None):
+        bg = bg or parent.cget("bg")
+        super().__init__(parent, width=20, height=14, bg=bg, highlightthickness=0, bd=0)
+        self._lit = -1
+        self.set(None)
+
+    @staticmethod
+    def bars(rssi) -> int:
+        if rssi is None:
+            return 0
+        return 4 if rssi >= -60 else 3 if rssi >= -70 else 2 if rssi >= -80 else 1
+
+    def set(self, rssi):
+        lit = self.bars(rssi)
+        if lit == self._lit:
+            return
+        self._lit = lit
+        self.delete("all")
+        for i in range(4):
+            h = 4 + i * 3
+            x = i * 5
+            c = T.SUCCESS if i < lit else T.BORDER
+            self.create_rectangle(x, 14 - h, x + 3, 14, fill=c, width=0)

@@ -76,11 +76,11 @@ def test_tr_switches_and_fills_in():
     was = i18n._lang
     try:
         i18n._lang = "en"
-        assert i18n.tr("Found {n}", n=2) == "Found 2"
+        assert i18n.tr("{n} poor", n=2) == "2 poor"
         assert i18n.tr("Not in the table") == "Not in the table"
         i18n._lang = "zh"
         # Chinese wraps between characters, so its spaces do not break; English stays as it is.
-        assert i18n.tr("Found {n}", n=2) == "找到 2 只"
+        assert i18n.tr("{n} poor", n=2) == "2 个偏弱"
         assert i18n.tr("Bluetooth unavailable — {error}", error="no adapter") == \
             "蓝牙不可用——no adapter"
         assert i18n.tr("Not in the table") == "Not in the table"

@@ -60,6 +60,7 @@ class HandState:
     words: int = 0             # caption set: 0 press/hold/release, 1 pulse/buzz/click
     word: int = -1             # which word of it is lit, -1 none
     hz: float = 0.0            # the current vibration's frequency, for the caption
+    tints: list | None = None  # an (r, g, b) per touch point instead of orange: verdicts
 
 
 def segment_level(s: Segment, t: float) -> float:
@@ -210,15 +211,16 @@ class HapticsTimeline:
             return st
         now = _pressure_at(samples, t)
         before = _pressure_at(samples, t - 0.25)
-        st.levels = [_level(k) for k in now]
-        total, was = sum(st.levels), sum(_level(k) for k in before)
+        st.levels = [level_from_kpa(k) for k in now]
+        total, was = sum(st.levels), sum(level_from_kpa(k) for k in before)
         if total > 0.15 or was > 0.15:
             st.words = 0
             st.word = 0 if total > was + 0.15 else 2 if total < was - 0.15 else 1 if total > 0.15 else 2
         return st
 
 
-def _level(kpa: float) -> float:
+def level_from_kpa(kpa: float) -> float:
+    """Measured pressure as how lit a touch point is drawn: full at FULL_KPA."""
     return 0.0 if kpa < QUIET_KPA else min(1.0, kpa / FULL_KPA)
 
 

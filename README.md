@@ -1,8 +1,8 @@
 # HEXR Companion
 
-A Windows and macOS app for testing HEXR haptic gloves. Scan, connect a left and/or right
-glove, drive any channel, watch what the hardware reports back, and run a
-pass/fail sweep on all six channels.
+A Windows and macOS app for testing HEXR haptic gloves. Connect a left and/or right
+glove, tap a finger and hold to feel it, see on the glove what the hardware
+reports back, and run a pass/fail sweep on all six channels.
 
 **This is a test and diagnostic tool, not a runtime.** To *build* with HEXR you
 integrate the [`com.microtube.hexr`](https://github.com/MicrotubeTechnologies/com.microtube.hexr)
@@ -35,7 +35,7 @@ Download `HexR-Companion-Mac.pkg`, double-click it, and follow the
 installer. It puts **HEXR Companion** in Applications.
 
 - macOS 10.13 or newer, Apple silicon or Intel (one universal app)
-- On first scan macOS asks for Bluetooth access — choose **Allow**. If it was
+- The first time it looks for gloves macOS asks for Bluetooth access — choose **Allow**. If it was
   denied, re-enable it in System Settings → Privacy & Security → Bluetooth.
 
 On macOS the app uses the native window frame (close and minimise are the
@@ -58,17 +58,23 @@ Python 3.10 or newer. The only runtime dependency is `bleak`.
 Two entries in the rail: **Test** for this computer's own gloves, **Headsets**
 for HEXR headsets on the network.
 
-**Test** — until a glove connects it is the scan: power on the arm module,
-press **Scan for HEXR**. Gloves advertise as `HaptGloveAR Left` /
-`HaptGloveAR Right`; hand is read from that name. Both connect independently
-and can be driven at once. Once one connects, Test is the controls: pick
-channels, pick pressure or vibration, set the levels, and trigger. Release vents
-them. The right-hand panel shows live per-channel pressure and battery straight
-from the glove, so a weak channel is visible rather than something you have to
-feel for. While testing, the header has **Gloves** (connect the other glove,
-battery, disconnect) and **Quick test** (all six channels to full for two
-seconds, peak pressure and time-to-peak, a verdict per channel; take the glove
-off first), each a panel over Test.
+**Test** — until a glove connects it shows a left and a right glove, dimmed, and
+searches on its own: power on the arm module and press **Connect** when it is
+found. Gloves advertise as `HaptGloveAR Left` / `HaptGloveAR Right`; hand is
+read from that name. Both connect independently and can be driven at once. Once
+one connects, Test is the controls: tap the fingers to drive on the glove
+picture, pick pressure or vibration and the intensity, and press and hold
+**Hold to feel** (or Space); **Keep on** turns it into a switch. The same glove
+glows with the pressure the glove measures, so a weak channel is visible rather
+than something you have to feel for. **Quick test**, in Test's title row, drives
+all six channels to full for two seconds and colours the glove by verdict (take
+the glove off first). The gloves button at the top right of every screen shows
+which gloves are connected and the battery, and opens a panel to connect the
+other glove or disconnect one.
+
+Every screen keeps its numbers (kPa, addresses, dBm, versions) behind **ⓘ
+Details** in its title row, off by default and remembered per screen.
+**Help** in the rail opens [USER-GUIDE.md](USER-GUIDE.md).
 
 **Headsets** — every headset running a HEXR app with HexR Remote (HexR 0.10.0
 or newer) on the same network: connect and disconnect its gloves through it,
@@ -77,9 +83,10 @@ allows it. The protocol is `Documentation~/RemoteProtocol.md` in the
 com.microtube.hexr package, the same one the Android app's Headsets tab speaks.
 The view needs PyAV, which only the Windows build ships.
 
-**Escape is the panic key**, and **All off** sits beside Trigger and Release on
-the Test screen. All channels are also vented on disconnect, on exit, and when
-the Quick test panel is closed mid-run.
+**Escape is the panic key**, and **Release all** sits under Hold to feel on the
+Test screen. Hold to feel lets go when the window loses focus or Test is left.
+All channels are also vented on disconnect, on exit, and when the Quick test
+panel is closed mid-run.
 
 **English | 中文** at the bottom of the rail, above the version, switches the
 whole app between English and Simplified Chinese, and the choice is remembered.
@@ -190,20 +197,23 @@ hexr/
   remote.py           HexR Remote: discovery, control links, video, no Tk
   headsets.py         the Headsets screen's model of every headset
   haptics.py          what each headset's gloves are doing, moment by moment
-  overlay.py          the glove drawn over a headset's view
+  overlay.py          the glove drawn over a headset's view, and in the app's own screens
+  gloveview.py        that glove as a Tk widget: tap a finger, see it light
   viewer.py           framing (square or 16:9) and the overlay, per frame
   recorder.py         the view, glove included, recorded to an MP4
   theme.py            design tokens
   widgets.py          the Canvas widget library
   shell.py            frameless window, title bar, nav rail, language switch
   i18n.py             English and Simplified Chinese: tr() and the Chinese table
-  settings.py         what is kept between runs: headset names, the language
+  settings.py         what is kept between runs: headset names, the language, Details
   screens/            connect · test · quicktest · headsets · fullview
-tests/                protocol, remote, overlay and language tests, no hardware needed
+tests/                protocol, remote, overlay, glove and language tests, no hardware needed
 packaging/            Inno Setup script and wizard art
 tools/make_icon.py    generates the app icon
 tools/fake_headset.py a pretend headset, for trying the Headsets screen without
                       a Quest: video, glove status and haptics on this computer
+tools/ui_snapshots.py screenshots of every screen in English or Chinese, with pretend
+                      gloves and a pretend headset, and a check that each fits
 ```
 
 `theme.py`, `widgets.py`, `shell.py` and `screens/base.py` are shared in spirit

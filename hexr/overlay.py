@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from . import theme as T
-from .haptics import FINGERS, HandState
+from .haptics import HandState
 
 ORANGE = (242, 102, 26)
 WHITE = (255, 255, 255)
@@ -43,6 +43,33 @@ class OverlayLook:
     labels: str = "active"   # active | always | off
     caption: bool = True
     backdrop: bool = True
+    title: bool = True       # "LEFT HAND" / "RIGHT HAND" above the glove
+    margin: float = .46      # room beside the glove for finger tags, as a share of its width
+
+
+def panel_size(gh: int, look: OverlayLook) -> tuple[int, int]:
+    """One hand's panel, in pixels, for a glove `gh` pixels tall."""
+    gw = gh * GLOVE_ASPECT
+    cap = gh * (.24 if look.caption else .06)
+    return int(gw + gw * look.margin * 2), int(gh * .12 + gh + cap)
+
+
+def touch_points(hand: str, gh: int, look: OverlayLook) -> list[tuple[float, float]]:
+    """Where the six touch points sit in one hand's panel: the drawing and a click both use it."""
+    gw = gh * GLOVE_ASPECT
+    gx, gy = gw * look.margin, gh * .1
+    return [(gx + (1 - dx if hand == "left" else dx) * gw, gy + dy * gh) for dx, dy, _ in DOTS]
+
+
+def nearest_point(points: list[tuple[float, float]], x: float, y: float,
+                  radius: float) -> int | None:
+    """The touch point nearest (x, y), if one is within `radius`."""
+    best, best_d = None, radius * radius
+    for i, (px, py) in enumerate(points):
+        d = (px - x) ** 2 + (py - y) ** 2
+        if d <= best_d:
+            best, best_d = i, d
+    return best
 
 
 def _asset(name: str) -> str:
@@ -63,43 +90,35 @@ class GloveOverlay:
         if not hands:
             return
         gh = max(60, int(round(look.size * img.height)))
-        pw, ph = self._panel_size(gh, look)
+        pw, ph = panel_size(gh, look)
         gap = int(gh * .08)
         margin = int(min(img.width, img.height) * .03)
         total = pw * len(hands) + gap * (len(hands) - 1)
         x = margin if look.corner[1] == "l" else img.width - margin - total
         y = margin if look.corner[0] == "t" else img.height - margin - ph
         for i, hand in enumerate(hands):
-            panel = self._panel(hand, gh, look, states.get(hand) or HandState())
+            panel = self.panel(hand, gh, look, states.get(hand) or HandState())
             img.paste(panel.convert("RGB"), (x + i * (pw + gap), y), panel)
 
     # -- one hand -------------------------------------------------------------------------
 
-    @staticmethod
-    def _panel_size(gh: int, look: OverlayLook) -> tuple[int, int]:
-        gw = gh * GLOVE_ASPECT
-        cap = gh * (.24 if look.caption else .06)
-        return int(gw + gw * .46 * 2), int(gh * .12 + gh + cap)
-
-    def _panel(self, hand: str, gh: int, look: OverlayLook, st: HandState) -> Image.Image:
+    def panel(self, hand: str, gh: int, look: OverlayLook, st: HandState) -> Image.Image:
+        """One hand's glove as an RGBA image `panel_size(gh, look)` big, lit as `st` says."""
         panel = self._static(hand, gh, look).copy()
-        gw = gh * GLOVE_ASPECT
-        gx, gy = gw * .46, gh * .1
+        gy = gh * .1
         top = Image.new("RGBA", panel.size, WHITE + (0,))
         tags = []
-        for ch in range(FINGERS):
-            dx, dy, left = DOTS[ch]
-            if hand == "left":
-                dx, left = 1 - dx, not left
-            cx, cy = gx + dx * gw, gy + dy * gh
+        for ch, (cx, cy) in enumerate(touch_points(hand, gh, look)):
+            left = DOTS[ch][2] != (hand == "left")
+            rgb = tuple(st.tints[ch]) if st.tints and st.tints[ch] else ORANGE
             level = st.levels[ch]
-            _put(panel, self._glow(gh, level), cx, cy)
+            _put(panel, self._glow(gh, level, rgb), cx, cy)
             if st.vibrating[ch] > 0:
                 rate = min(st.vibrating[ch], 2.5)
                 for k in range(2):
                     phase = (st.since[ch] * rate + k / 2) % 1
                     _put(top, self._ring(gh, gh * .03 * (1 + 2.4 * phase), (1 - phase) * .9), cx, cy)
-            _put(top, self._core(gh, .35 + .65 * level), cx, cy)
+            _put(top, self._core(gh, .35 + .65 * level, rgb), cx, cy)
             show = (.55 + .45 * min(1, level * 2) if look.labels == "always" else
                     min(1.0, max(0.0, (level - .08) * 4)) if look.labels == "active" else 0)
             if show > 0:
@@ -116,26 +135,27 @@ class GloveOverlay:
         return panel
 
     def _static(self, hand: str, gh: int, look: OverlayLook) -> Image.Image:
-        key = ("static", hand, gh, look.caption, look.backdrop)
+        key = ("static", hand, gh, look.caption, look.backdrop, look.title, look.margin)
         if key in self._cache:
             return self._cache[key]
-        w, h = self._panel_size(gh, look)
+        w, h = panel_size(gh, look)
         big = Image.new("RGBA", (w * SS, h * SS), (8, 9, 12, 0))
         d = ImageDraw.Draw(big)
         if look.backdrop:
             d.rounded_rectangle((0, 0, w * SS - 1, h * SS - 1), radius=int(gh * .07 * SS),
                                 fill=(8, 9, 12, 148), outline=(255, 255, 255, 22),
                                 width=max(SS, int(gh * .003 * SS)))
-        d.text((gh * .06 * SS, gh * .065 * SS), "LEFT HAND" if hand == "left" else "RIGHT HAND",
-               font=self._font("Inter-Bold.ttf", gh * .036 * SS), fill=(150, 151, 154, 255),
-               anchor="lm")
+        if look.title:
+            d.text((gh * .06 * SS, gh * .065 * SS), "LEFT HAND" if hand == "left" else "RIGHT HAND",
+                   font=self._font("Inter-Bold.ttf", gh * .036 * SS), fill=(150, 151, 154, 255),
+                   anchor="lm")
         panel = big.resize((w, h), Image.LANCZOS)
 
         gw = int(round(gh * GLOVE_ASPECT))
         art = self._glove_art().resize((gw, gh), Image.LANCZOS)
         if hand == "left":
             art = art.transpose(Image.FLIP_LEFT_RIGHT)
-        gx, gy = int(gw * .46), int(gh * .1)
+        gx, gy = int(gw * look.margin), int(gh * .1)
         shadow = Image.new("RGBA", art.size, (0, 0, 0, 0))
         shadow.putalpha(art.getchannel("A").point(lambda a: int(a * .55)))
         pad = int(gh * .08)
@@ -161,9 +181,13 @@ class GloveOverlay:
                 self._fonts[key] = ImageFont.load_default(max(6, key[1]))
         return self._fonts[key]
 
-    def _glow(self, gh: int, level: float) -> Image.Image:
+    def clear(self):
+        """Forget every piece kept: for a view whose size keeps changing."""
+        self._cache.clear()
+
+    def _glow(self, gh: int, level: float, rgb=ORANGE) -> Image.Image:
         step = round(level * 32)
-        key = ("glow", gh, step)
+        key = ("glow", gh, step, rgb)
         if key not in self._cache:
             lv = step / 32
             r = gh * .085 * (.55 + .9 * lv)
@@ -174,14 +198,14 @@ class GloveOverlay:
             c = size / 2
             for i in range(int(math.ceil(r)), 0, -1):
                 d.ellipse((c - i, c - i, c + i, c + i), fill=int(peak * (1 - i / r)) if i < r else 0)
-            sprite = Image.new("RGBA", (size, size), ORANGE + (0,))
+            sprite = Image.new("RGBA", (size, size), tuple(rgb) + (0,))
             sprite.putalpha(alpha.filter(ImageFilter.GaussianBlur(1)))
             self._cache[key] = sprite
         return self._cache[key]
 
-    def _core(self, gh: int, alpha: float) -> Image.Image:
+    def _core(self, gh: int, alpha: float, rgb=ORANGE) -> Image.Image:
         step = round(alpha * 16)
-        key = ("core", gh, step)
+        key = ("core", gh, step, rgb)
         if key not in self._cache:
             a = step / 16
             r, ring = gh * .016, gh * .008
@@ -191,9 +215,9 @@ class GloveOverlay:
             def paint(d, s):
                 c = size * s / 2
                 d.ellipse((c - outer * s, c - outer * s, c + outer * s, c + outer * s),
-                          fill=ORANGE + (int(230 * a),))
+                          fill=tuple(rgb) + (int(230 * a),))
                 d.ellipse((c - r * s, c - r * s, c + r * s, c + r * s), fill=WHITE + (int(255 * a),))
-            self._cache[key] = _supersampled((size, size), paint, ORANGE)
+            self._cache[key] = _supersampled((size, size), paint, rgb)
         return self._cache[key]
 
     def _ring(self, gh: int, radius: float, alpha: float) -> Image.Image:

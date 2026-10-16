@@ -11,6 +11,7 @@ AppState, and this redraws from it 20 times a second.
 from __future__ import annotations
 
 import sys
+import time
 import tkinter as tk
 
 from hexr import i18n
@@ -21,11 +22,12 @@ from hexr.screens.connect import ConnectScreen
 from hexr.screens.headsets import HeadsetsScreen
 from hexr.screens.quicktest import QuickTestScreen
 from hexr.screens.test import TestScreen
-from hexr.i18n import tr
 from hexr.shell import NAV_OF, Shell
 from hexr.state import HANDS, AppState
 
 UI_HZ = 20
+# How long a newly connected glove shows lit on the connect screen before Test opens.
+LIT_S = 1.2
 
 
 class App:
@@ -39,9 +41,7 @@ class App:
         # HEXR headsets on the network. Nothing listens until the Headsets screen is opened.
         self.headsets = Headsets()
 
-        self.shell = Shell(root, on_nav=self.navigate,
-                           on_quick_test=lambda: self.open_panel("quicktest"),
-                           on_gloves=lambda: self.open_panel("connect"),
+        self.shell = Shell(root, on_nav=self.navigate, on_gloves=self._gloves_clicked,
                            on_language=self.set_language)
         self.shell.on_close = self.shutdown
         root.protocol("WM_DELETE_WINDOW", self.shell.close)
@@ -49,6 +49,7 @@ class App:
         self._build_screens()
         # Gloves or Quick test, when one is open as a panel over Test.
         self.panel: str | None = None
+        self._lit_at: float | None = None
         self.navigate("test")
 
         # Escape is the panic key. A haptics tester can leave a channel pressed
@@ -105,6 +106,16 @@ class App:
 
     def all_off(self):
         self.engine.send_all_off()
+        test = self.screens.get("test")
+        if test is not None and hasattr(test, "reset_pad"):
+            test.reset_pad()
+
+    def _gloves_clicked(self):
+        """The header's glove status: connect one if there is none, else the gloves panel."""
+        if self.state.any_connected():
+            self.open_panel("connect")
+        else:
+            self.navigate("test")
 
     def shutdown(self):
         self.headsets.stop()
@@ -164,43 +175,43 @@ class App:
         screen = self.screens.get(self.shell.screen)
         if screen is not None and hasattr(screen, "on_tick"):
             screen.on_tick()
+        if screen is not None and hasattr(screen, "refit"):
+            screen.refit()
         self.root.after(int(1000 / UI_HZ), self._tick)
 
     def _sync_status(self):
-        gloves = self.state.connected_gloves()
-        if not gloves:
-            self.shell.set_status(T.DOT_OFF, tr("no glove"))
-            return
-        # A connected glove is a working glove whether or not it streams, so
-        # the pill reports the connection and leaves telemetry to the places
-        # that actually need it.
-        hands = "+".join(sorted(g.hand[0] for g in gloves))
-        batteries = [g.battery for g in gloves if g.battery is not None]
-        if batteries:
-            self.shell.set_status(T.SUCCESS,
-                                  f"{hands}  {round(min(batteries) * 100)}%")
-        else:
-            self.shell.set_status(T.SUCCESS, hands)
+        """The header's glove status: a dot per hand, and the lower battery.
+        A connected glove is a working glove whether or not it streams, so this
+        reports the connection and leaves telemetry to the screens that need it."""
+        dots = {}
+        for hand in HANDS:
+            g = self.state.get(hand)
+            dots[hand] = (T.SUCCESS if g and g.connected else
+                          T.ACCENT if g and g.connecting else None)
+        batteries = [g.battery for g in self.state.connected_gloves() if g.battery is not None]
+        low = bool(batteries) and min(batteries) < 0.2
+        self.shell.set_gloves(dots, f"{round(min(batteries) * 100)}%" if batteries else None,
+                              low)
 
     def _follow_gloves(self):
-        """Test turns into the controls the moment a glove connects, and back
-        into the scan when the last one goes; and the header's Quick test and
-        Gloves buttons are there exactly while there is a glove to test."""
+        """Test turns into the controls once a glove connects, and back into
+        connecting when the last one goes. A glove that has just connected
+        shows lit for a moment first, and the other hand gets the chance to
+        finish connecting too."""
         connected = self.state.any_connected()
         if self.panel is None:
             if self.shell.screen == "connect" and connected:
-                self.shell.go("test")
+                now = time.monotonic()
+                if self._lit_at is None:
+                    self._lit_at = now
+                connecting = any(g.connecting for g in self.state.gloves.values())
+                if now - self._lit_at >= LIT_S and not connecting:
+                    self._lit_at = None
+                    self.shell.go("test")
             elif self.shell.screen == "test" and not connected:
                 self._show_test()
-        testing = connected and self.shell.screen in ("test", "connect", "quicktest")
-        gloves = [g for g in (self.state.get(h) for h in HANDS) if g]
-        if self.engine.scanning or any(g.connecting for g in gloves):
-            dot = T.ACCENT
-        elif connected:
-            dot = T.SUCCESS
-        else:
-            dot = None
-        self.shell.set_test_actions(testing, dot)
+        if not connected:
+            self._lit_at = None
 
 
 def main():
