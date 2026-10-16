@@ -44,7 +44,6 @@ class SideloadScreen(Screen):
         self._ticks = 0
         self._dots = 0
         self._step = 0
-        self._back_to_apk = False          # "Change" was pressed: step 2 until an APK is chosen
         self._help = False
         self._rows: dict[str, tk.Frame] = {}
         self._fix_kind = ""
@@ -173,13 +172,6 @@ class SideloadScreen(Screen):
         _title(c).configure(text=tr("Choose the APK"))
         Button(c, tr("Choose APK…"), command=self._choose, height=44, font=T.font(14, 600),
                min_width=220).pack(anchor="w", pady=(20, 0))
-        # After "Change", the way back to the APK already chosen.
-        self.a_back = TextLink(c, tr("Back"), command=self._keep_apk, bg=T.RAISED,
-                               fg=T.TEXT_FAINT, size=12.5)
-
-    def _keep_apk(self):
-        self._back_to_apk = False
-        self._refresh()
 
     def _choose(self):
         m = self.model
@@ -191,7 +183,6 @@ class SideloadScreen(Screen):
             filetypes=[(tr("Android app"), "*.apk"), (tr("All files"), "*")])
         if path:
             m.choose(os.path.normpath(path))
-            self._back_to_apk = False
             self._refresh()
 
     # -- step 3: install ---------------------------------------------------------------------------
@@ -203,9 +194,12 @@ class SideloadScreen(Screen):
         self.i_apk = tk.Label(what, text="", bg=T.RAISED, fg=T.TEXT_MUTED, font=T.font(13),
                               anchor="w")
         self.i_apk.pack(side="left")
-        self.i_change = TextLink(what, tr("Change"), command=self._change_apk, bg=T.RAISED,
-                                 size=12.5)
-        self.i_change.pack(side="left", padx=(12, 0))
+        # A button, not a link: picking another APK is the next thing to do after each install.
+        self.i_change = Button(what, tr("Change APK…"), command=self._choose, height=34,
+                               fill=T.INSET, fg=T.TEXT, border=T.BORDER, hover_fill=T.INSET,
+                               hover_fg=T.ACCENT, hover_border=T.ACCENT, padx=16,
+                               font=T.font(12.5, 600))
+        self.i_change.pack(side="left", padx=(16, 0))
         self.i_other = TextLink(what, tr("Other headset"), command=self._other_headset,
                                 bg=T.RAISED, size=12.5)
         self.install_btn = Button(c, tr("Install"), command=self._install_clicked, height=44,
@@ -228,7 +222,7 @@ class SideloadScreen(Screen):
         self.i_title.configure(text=tr("Install on {name}", name=name))
         self.i_apk.configure(text=f"{os.path.basename(m.apk)} · {_size(m.apk)}" if m.apk else "")
         busy = m.busy
-        _show(self.i_change, not busy, side="left", padx=(12, 0))
+        _show(self.i_change, not busy, side="left", padx=(16, 0))
         _show(self.i_other, not busy and len(m.devices) > 1, side="left", padx=(12, 0))
 
         if busy:
@@ -263,10 +257,6 @@ class SideloadScreen(Screen):
             (self.hint, bool(hint), dict(fill="x", pady=(6, 0))),
             (self.fix_btn, bool(fix), dict(anchor="w", pady=(14, 0))),
         ])
-
-    def _change_apk(self):
-        self._back_to_apk = True
-        self._refresh()
 
     def _other_headset(self):
         if not self.model.busy:
@@ -310,7 +300,7 @@ class SideloadScreen(Screen):
             return 3
         if d is None or not d.ready:
             return 1
-        if self._back_to_apk or not m.apk:
+        if not m.apk:
             return 2
         return 3
 
@@ -338,9 +328,7 @@ class SideloadScreen(Screen):
 
         if step == 1:
             self._show_headset()
-        elif step == 2:
-            _show(self.a_back, bool(self._back_to_apk and m.apk), anchor="w", pady=(14, 0))
-        else:
+        elif step == 3:
             self._show_install()
         self._refresh_numbers()
 

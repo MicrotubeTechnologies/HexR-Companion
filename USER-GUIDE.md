@@ -383,7 +383,7 @@ phone app. Without it the headset never shows up here.
 3. **Install.** In the headset, the app is in **Library → Unknown Sources**.
 
 **The next headset:** unplug this one, plug in the next, press **Install**.
-**Change** picks another APK. With more than one headset plugged in, pick
+**Change APK…** opens the folder to pick another APK. With more than one headset plugged in, pick
 which one first.
 
 If an install fails, the screen says why. Two failures come with a button:
