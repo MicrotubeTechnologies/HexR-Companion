@@ -537,19 +537,28 @@ class Scrubber(Slider):
 
 
 class Progress(tk.Canvas):
-    """A determinate bar — the countdown and capture phases of teaching."""
+    """A determinate bar — an export's progress. For work whose length nobody knows (an
+    install, which adb does not report), `busy()` slides a segment across it instead."""
 
     def __init__(self, parent, height=4, bg=None):
         bg = bg or parent.cget("bg")
         super().__init__(parent, width=1, height=height, bg=bg,
                          highlightthickness=0, bd=0)     # see Slider on width
         self.h, self._v, self._colour = height, 0.0, T.ACCENT
+        self._phase: float | None = None
         self.bind("<Configure>", lambda e: self._paint())
 
     def set(self, value: float, colour: str | None = None):
         self._v = max(0.0, min(1.0, value))
+        self._phase = None
         if colour:
             self._colour = colour
+        self._paint()
+
+    def busy(self, phase: float):
+        """A third of the bar, sliding in from the left and out at the right as `phase` runs
+        from 0 to 1, and round again."""
+        self._phase = phase % 1.0
         self._paint()
 
     def _paint(self):
@@ -558,9 +567,48 @@ class Progress(tk.Canvas):
         if w <= 1:
             return
         draw_round(self, 0, 0, w - 1, self.h - 1, self.h / 2, T.BORDER)
-        if self._v > 0:
+        if self._phase is not None:
+            seg = (w - 1) / 3
+            x0 = self._phase * (w - 1 + seg) - seg
+            x1 = min(w - 1, x0 + seg)
+            x0 = max(0, x0)
+            if x1 - x0 >= self.h:
+                draw_round(self, x0, 0, x1, self.h - 1, self.h / 2, self._colour)
+        elif self._v > 0:
             draw_round(self, 0, 0, max(self.h, self._v * (w - 1)), self.h - 1,
                        self.h / 2, self._colour)
+
+
+class StepBadge(tk.Canvas):
+    """A step's number in a circle, for a screen laid out as steps: orange while it is the step
+    to do, a tick once it is done, grey while it waits on one before it."""
+
+    D = 26
+
+    def __init__(self, parent, number: int, bg=None):
+        bg = bg or parent.cget("bg")
+        super().__init__(parent, width=self.D, height=self.D, bg=bg, highlightthickness=0, bd=0)
+        self.number, self.state = number, None
+        self.set("todo")
+
+    def set(self, state: str):
+        """"todo", "now" or "done"."""
+        if state == self.state:
+            return
+        self.state = state
+        self.delete("all")
+        d = self.D - 1
+        if state == "now":
+            self.create_oval(0, 0, d, d, fill=T.ACCENT, outline=T.ACCENT)
+            self.create_text(d / 2 + .5, d / 2 + .5, text=str(self.number), fill=T.CANVAS,
+                             font=T.font(13, 700))
+        elif state == "done":
+            self.create_oval(0, 0, d, d, fill="", outline=T.SUCCESS, width=1.5)
+            self.create_text(d / 2 + .5, d / 2 + .5, text="✓", fill=T.SUCCESS, font=T.font(13, 700))
+        else:
+            self.create_oval(0, 0, d, d, fill="", outline=T.BORDER, width=1.5)
+            self.create_text(d / 2 + .5, d / 2 + .5, text=str(self.number), fill=T.TEXT_FAINT,
+                             font=T.font(13, 600))
 
 
 class ScrollArea(tk.Frame):

@@ -81,12 +81,13 @@ You do **not** pair the glove in Windows Bluetooth settings. Leave those alone
 
 ---
 
-## Three places: Test, Headsets and Recordings
+## Four places: Test, Headsets, Recordings and APK Sideload
 
-The rail on the left has three entries. **Test** is this computer's own gloves,
+The rail on the left has four entries. **Test** is this computer's own gloves,
 over its Bluetooth. **Headsets** is the HEXR headsets on the network, at an
 event. **Recordings** is what you recorded from a headset, made into videos to
-share. Everything below up to The window is Test.
+share. **APK Sideload** installs an app on a headset plugged into this computer.
+Everything below up to The window is Test.
 
 ## Test · connecting a glove
 
@@ -364,6 +365,40 @@ The same recording can be exported in every shape, as often as you like.
 
 ---
 
+## APK Sideload
+
+Installs an app (an `.apk` file) on a Quest plugged into this computer with a
+USB cable, as SideQuest does. The app carries its own adb, so it needs no
+internet and nothing else installed. One step is on screen at a time, and it
+moves on by itself.
+
+**Once per headset:** turn on **Developer Mode** for it in the Meta Horizon
+phone app. Without it the headset never shows up here.
+
+1. **Plug in the headset** with a USB-C cable. Put the headset on: when it asks
+   to *Allow USB debugging*, tick *Always allow from this computer* and choose
+   **Allow**. On a Mac, choose **Allow** if macOS asks whether the accessory
+   may connect.
+2. **Choose the APK.** It is remembered, so next time this step is skipped.
+3. **Install.** In the headset, the app is in **Library → Unknown Sources**.
+
+**The next headset:** unplug this one, plug in the next, press **Install**.
+**Change** picks another APK. With more than one headset plugged in, pick
+which one first.
+
+If an install fails, the screen says why. Two failures come with a button:
+
+- *A different build is on the headset* — the copy there was signed with
+  another key, and Android will not replace it. **Uninstall and install**
+  removes it first; its saved data on the headset goes with it.
+- *The headset has a newer version* — **Install older version** replaces it
+  anyway.
+
+**ⓘ Details** shows which adb is used, the headset's serial number, and what
+adb printed for the last install.
+
+---
+
 ## Safety
 
 A haptic glove can hold a finger squeezed. Three ways to stop everything:
@@ -392,6 +427,8 @@ module off releases it.
 | Wrong finger responds | Tell us — that is a channel mapping problem worth knowing about. |
 | The connector pushes back | Mismatched sides. Left glove needs the left module. |
 | SmartScreen warning on install | Expected — the build is not signed. **More info → Run anyway**. |
+| APK Sideload stays on *Plug in the headset* | Developer Mode is off, or the cable only charges. On Windows, Meta's Quest ADB driver may be missing. |
+| *Put on the headset and choose Allow* | The headset is asking whether to trust this computer. Put it on and choose **Allow**. |
 
 Anything the app cannot explain, `tools/probe_glove.py` in the source will dump
 exactly what the glove exposes and sends. Run it with the app closed.

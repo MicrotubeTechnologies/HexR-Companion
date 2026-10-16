@@ -79,6 +79,12 @@ jobs:
           python tests/test_protocol.py
           python tests/test_remote.py
           python tests/test_i18n.py
+          python tests/test_sideload.py
+
+      # Google's adb, for the APK Sideload screen: the app carries it, so it needs no internet.
+      # Pinned to one release and checked against its SHA-256 before it is unpacked.
+      - name: Fetch adb
+        run: python tools/fetch_adb.py
 
       # The icon is generated, not checked in as a finished asset. Drawing it
       # here means a release can never ship an icon that lags the generator.
@@ -226,6 +232,9 @@ jobs:
             ```
             gh attestation verify HexR-Companion-Setup.exe --repo ${{ github.repository }}
             ```
+
+            It includes Google's adb, for installing apps on a headset over
+            USB from the APK Sideload screen.
 
             Provided as-is, without warranty of any kind. The app makes no
             network connections and collects no data.
