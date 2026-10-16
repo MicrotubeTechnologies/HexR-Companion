@@ -56,7 +56,7 @@ if [[ ! -x "$VENV/bin/python" ]]; then
   "$PYTHON" -m venv "$VENV"
 fi
 "$VENV/bin/pip" install -q --upgrade pip
-"$VENV/bin/pip" install -q -r requirements.txt pyinstaller delocate
+"$VENV/bin/pip" install -q -r requirements.txt pyinstaller delocate certifi
 
 # Pillow and PyAV ship an arm64 wheel and an Intel wheel but no universal2
 # one, and PyInstaller refuses single-arch binaries in a universal app. Fuse
@@ -85,7 +85,10 @@ step "Running protocol tests"
 # -------------------------------------------------------------- adb
 # Google's adb for the APK Sideload screen: the app carries it, so it needs no internet.
 step "Fetching adb"
-"$VENV/bin/python" tools/fetch_adb.py --platform mac
+# python.org's Python has no root certificates until its "Install Certificates"
+# script is run; certifi's do instead, so no build Mac needs that step.
+SSL_CERT_FILE="$("$VENV/bin/python" -c 'import certifi; print(certifi.where())')" \
+  "$VENV/bin/python" tools/fetch_adb.py --platform mac
 
 # -------------------------------------------------------------- icon
 step "Generating icon.icns"
