@@ -2,9 +2,10 @@
 
 The glove is the screen. Tap a touch point to pick it; press and hold the pad and the
 glove presses back, for as long as the pad is held, the way a hand meets an object.
-The same glove lights up with what the glove measures, so what was asked for and
-what the hardware did are one picture rather than two columns. The numbers behind it
-(kPa, the source, how the firmware drives a vibration) are under Details.
+The same glove lights up with what the glove measures. Under it, each finger's air
+pressure, a row each: what the glove measures, as a bar and in kPa, and a white mark
+where that finger is set to go, so what was asked for and what the hardware did sit
+side by side. Details adds the battery and how the firmware drives a vibration.
 
 "Keep on" turns the pad into a switch for longer runs. Escape, Release all, leaving
 the screen and the window losing focus all let go.
@@ -20,8 +21,8 @@ from .. import theme as T
 from ..gloveview import GloveView, pad_state
 from ..i18n import N_, tr
 from ..state import HANDS
-from ..widgets import (Button, Disclosure, HoldButton, Segmented, Slider, StatusChip,
-                       TextLink, Toggle)
+from ..widgets import (Button, Disclosure, HoldButton, PressureTable, Segmented, Slider,
+                       StatusChip, TextLink, Toggle)
 from .base import Screen
 
 RIGHT_W = 340
@@ -80,6 +81,11 @@ class TestScreen(Screen):
         TextLink(links, tr("None"), command=lambda: self._select(set())).pack(side="left")
         self.hint = tk.Label(under, text=tr("Tap a finger"), bg=T.SURFACE, fg=T.TEXT_FAINT,
                              font=T.font(13))
+        # Each finger's air pressure, and where it is set to go.
+        self.table = PressureTable(parent, [tr(P.FINGER_LABELS[P.Finger(ch)]) for ch in range(6)],
+                                   tr("Air supply"),
+                                   on_toggle=lambda _hand, ch: self._toggle_channel(ch))
+        self.table.pack(fill="x", pady=(14, 0))
         self.info = tk.Label(parent, text="", bg=T.SURFACE, fg=T.TEXT_FAINT, font=T.mono(11),
                              anchor="w", justify="left")
 
@@ -224,7 +230,7 @@ class TestScreen(Screen):
         self._show(self.peak, vibrating)
         pct = f"{round(s.intensity * 100)}%"
         self.intensity.value_label.configure(
-            text=f"{pct} · {P.intensity_to_kpa(s.intensity):.0f} kPa" if self.details else pct)
+            text=f"{pct} · {P.intensity_to_kpa(s.intensity):.0f} kPa")
         self.frequency.value_label.configure(text=f"{s.frequency:.1f} Hz")
         self.kind.configure(text=tr("Pulse") if s.frequency < P.PWM_VIBRATION_HZ else tr("Buzz"))
         self.speed.value_label.configure(text=f"{round(s.speed * 100)}%")
@@ -283,7 +289,11 @@ class TestScreen(Screen):
         self.glove.set_dim({h.lower(): 1.0 if h in s.hands else 0.45 for h in connected})
         now = time.monotonic()
         held = self.pad.held
-        states, values, info = {}, {}, []
+        # Where a picked finger is set to go: a pressure, or a pulsed one; a buzz drives the
+        # motor rather than a pressure, so it has no mark.
+        target = P.intensity_to_kpa(s.intensity) \
+            if s.mode == "pressure" or s.frequency < P.PWM_VIBRATION_HZ else None
+        states, rows, info = {}, [], []
         for hand in connected:
             g = self.app.state.get(hand)
             live = g.is_live()
@@ -292,17 +302,18 @@ class TestScreen(Screen):
                 kpa, held and hand in s.hands, now - self._pressed_at,
                 None if self._released_at is None else now - self._released_at,
                 s.mode, s.intensity, s.frequency, s.channels)
+            rows.append({"hand": hand, "title": tr(hand), "live": live, "kpa": kpa,
+                         "source": g.source_kpa() if live else None,
+                         "picked": set(s.channels) if hand in s.hands else set(),
+                         "target": target, "note": "" if live else tr("No readings")})
             if self.details:
-                values[hand.lower()] = [f"{k:.0f}" for k in kpa] if kpa else ["—"] * 6
-                bits = [tr(hand), tr("battery {level}", level=g.battery_label())]
-                bits.append(tr("Source {kpa} kPa", kpa=f"{g.source_kpa():.1f}") if live
-                            else tr("no telemetry"))
-                info.append("  ·  ".join(bits))
+                info.append("  ·  ".join([tr(hand), tr("battery {level}",
+                                                       level=g.battery_label())]))
                 if g.absolute_pa:
                     info.append(tr("This glove reports absolute pressure; readings are "
                                    "converted to gauge kPa."))
         self.glove.set_states(states)
-        self.glove.set_values(values if self.details else None)
+        self.table.set(rows)
         if self.details:
             self.info.configure(text="\n".join(info))
 

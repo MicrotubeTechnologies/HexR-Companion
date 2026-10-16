@@ -196,9 +196,21 @@ Some starting points worth trying with the glove on:
 
 ### What the glove reports
 
-The glove on the screen glows with the pressure the glove measures. **Details**
-adds the numbers: kPa beside each point, the source pressure feeding all of
-them, and the battery.
+The glove on the screen glows with the pressure the glove measures, and under it
+each finger has a row of its own, for each glove connected:
+
+- **The bar and the number** are the air pressure the glove measures in that
+  finger now, in kPa.
+- **The white mark** is where the finger is set to go: the intensity, in kPa
+  (it is also beside the Intensity slider). A buzz, 5 Hz and above, drives the
+  finger's motor rather than a pressure, so it has no mark.
+- **Picked fingers** are bright; the others are faint. Click a row to pick or
+  drop that finger, as a tap on the glove does.
+- **Air supply**, the last row, is the pressure feeding all of them. If it is
+  low while you hold, the pump is not keeping up.
+
+So a weak finger shows itself: its bar stops short of the mark while the others
+reach it. **Details** adds the battery.
 
 **If a glove reports nothing, that is not a fault.** Some gloves stream
 telemetry and some do not, and haptics work either way; the picture then follows

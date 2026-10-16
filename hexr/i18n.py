@@ -270,4 +270,8 @@ ZH: dict[str, str] = {
     "View only": "仅画面",
     "Exporting {shape}… {pct}%": "正在导出{shape}… {pct}%",
     "Exporting another recording… {pct}%": "正在导出另一段录像… {pct}%",
+    "Air supply": "气源",
+    "No readings": "无读数",
+    "Set to": "设定",
+    "Now": "当前",
 }

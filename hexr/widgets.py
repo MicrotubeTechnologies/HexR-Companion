@@ -1518,3 +1518,127 @@ class SignalBars(tk.Canvas):
             x = i * 5
             c = T.SUCCESS if i < lit else T.BORDER
             self.create_rectangle(x, 14 - h, x + 3, 14, fill=c, width=0)
+
+
+class PressureTable(tk.Canvas):
+    """Each finger's air pressure, a row each, for one or two hands side by side: what the glove
+    measures (the bar and the number, in kPa) and what the finger is set to (a white mark).
+    Fingers picked are bright and the rest faint; the air supply feeding them all is the last
+    row. A click on a finger's row picks or drops it, as a tap on the glove does.
+
+    `set(groups)` takes a dict per hand: hand, title, live, kpa (six, or None), source (or
+    None), picked (a set of channels), target (kPa, or None) and note. It redraws only when
+    something it shows has changed."""
+
+    ROW = 21
+    HEAD = 22
+    SCALE = 55.0          # kPa at a bar's end: the glove is driven 15-50
+    GAP = 28
+
+    def __init__(self, parent, names, supply, on_toggle=None, bg=None):
+        bg = bg or parent.cget("bg")
+        super().__init__(parent, width=1, height=self.HEAD + self.ROW * 7 + 8, bg=bg,
+                         highlightthickness=0, bd=0)
+        self.names, self.supply, self.on_toggle = list(names), supply, on_toggle
+        self._groups: list[dict] = []
+        self._key = None
+        self._font, self._bold = T.font(12), T.font(12, 600)
+        self._mono = T.mono(11)
+        self._name_w = max(self._bold.measure(n) for n in self.names + [supply]) + 12
+        self.bind("<Configure>", lambda e: self._draw())
+        self.bind("<Button-1>", self._click)
+        self.bind("<Motion>", self._motion)
+
+    def set(self, groups: list[dict]):
+        key = tuple((g["hand"], g["live"], tuple(round(k * 2) for k in (g["kpa"] or ())),
+                     round((g["source"] or 0) * 2), tuple(sorted(g["picked"])),
+                     None if g["target"] is None else round(g["target"], 1), g["note"])
+                    for g in groups)
+        if key != self._key:
+            self._key, self._groups = key, groups
+            self._draw()
+
+    # -- where things are ------------------------------------------------------------------------
+
+    def _columns(self):
+        n = max(1, len(self._groups))
+        w = self.winfo_width()
+        gw = min(440, (w - self.GAP * (n - 1)) / n)
+        return [(i * (gw + self.GAP), gw) for i in range(n)]
+
+    def _row_y(self, row: int) -> float:
+        """The middle of a row: six fingers, then the air supply a little apart."""
+        return self.HEAD + self.ROW * row + self.ROW / 2 + (6 if row == 6 else 0)
+
+    def _at(self, x, y):
+        for (x0, gw), g in zip(self._columns(), self._groups):
+            if x0 <= x < x0 + gw:
+                row = int((y - self.HEAD) // self.ROW)
+                return (g["hand"], row) if 0 <= row < 6 else None
+        return None
+
+    # -- drawing ---------------------------------------------------------------------------------
+
+    def _draw(self):
+        self.delete("all")
+        if self.winfo_width() <= 1:
+            return
+        for (x0, gw), g in zip(self._columns(), self._groups):
+            self._group(x0, gw, g)
+
+    def _group(self, x0, gw, g):
+        self.create_text(x0, self.HEAD / 2 - 2, text=g["title"], anchor="w", fill=T.TEXT_2,
+                         font=T.font(12, 600))
+        self._legend(x0 + gw, self.HEAD / 2 - 2, g["note"])
+        value_w = self._mono.measure("00 kPa") + 6
+        bx0, bx1 = x0 + self._name_w, x0 + gw - value_w - 8
+        kpa = g["kpa"] or [None] * 6
+        for row in range(7):
+            y = self._row_y(row)
+            supply = row == 6
+            picked = not supply and row in g["picked"]
+            value = g["source"] if supply else kpa[row]
+            if supply:
+                self.create_line(x0, y - self.ROW / 2 - 3, x0 + gw, y - self.ROW / 2 - 3,
+                                 fill=T.BORDER_SOFT)
+            name = self.supply if supply else self.names[row]
+            self.create_text(x0, y, text=name, anchor="w",
+                             fill=T.TEXT if picked else T.TEXT_FAINT if supply else T.TEXT_MUTED,
+                             font=self._bold if picked else self._font)
+            # Round-ended lines: Tk draws them cleaner than a small smoothed polygon.
+            self.create_line(bx0 + 4, y, bx1 - 4, y, width=8, capstyle="round", fill=T.BORDER)
+            if value is not None and value > 0.5:
+                frac = max(0.0, min(1.0, value / self.SCALE))
+                colour = T.TEXT_2 if supply else T.ACCENT if picked else T.TEXT_MUTED
+                self.create_line(bx0 + 4, y, max(bx0 + 4.5, bx0 + 4 + frac * (bx1 - bx0 - 8)), y,
+                                 width=8, capstyle="round", fill=colour)
+            if picked and g["target"] is not None:
+                tx = bx0 + max(0.0, min(1.0, g["target"] / self.SCALE)) * (bx1 - bx0)
+                self.create_line(tx, y - 8, tx, y + 8, fill=T.TEXT, width=2)
+            self.create_text(x0 + gw, y, anchor="e", font=self._mono,
+                             text="—" if value is None else f"{value:.0f} kPa",
+                             fill=T.TEXT if picked else T.TEXT_MUTED)
+
+    def _legend(self, x1, y, note: str):
+        """At the right of a hand's heading: what the bar and the mark mean, or why it is empty."""
+        small = T.font(11)
+        if note:
+            self.create_text(x1, y, text=note, anchor="e", fill=T.TEXT_FAINT, font=small)
+            return
+        set_to, now = tr("Set to"), tr("Now")
+        x = x1 - small.measure(set_to)
+        self.create_text(x1, y, text=set_to, anchor="e", fill=T.TEXT_FAINT, font=small)
+        self.create_line(x - 8, y - 6, x - 8, y + 6, fill=T.TEXT, width=2)
+        x -= 26 + small.measure(now)
+        self.create_text(x, y, text=now, anchor="w", fill=T.TEXT_FAINT, font=small)
+        self.create_line(x - 22, y, x - 8, y, width=6, capstyle="round", fill=T.ACCENT)
+
+    # -- picking ---------------------------------------------------------------------------------
+
+    def _click(self, e):
+        at = self._at(e.x, e.y)
+        if at and self.on_toggle:
+            self.on_toggle(*at)
+
+    def _motion(self, e):
+        self.configure(cursor="hand2" if self._at(e.x, e.y) and self.on_toggle else "")
