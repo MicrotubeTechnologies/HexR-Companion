@@ -48,9 +48,10 @@ never leaves the room, the internet permission, so the app declares it. See
 ## What it stores
 
 Test results exist only while the app is open, in memory. Closing it discards
-them. The one thing written to storage is the name you may give a headset on the
-Headsets tab (such as "Station 1"), kept in the app's private storage on the
-phone so the name is still there next time. Nothing is backed up — the app sets
+them. Two things are written to storage: the language you pick (English or
+Chinese), and the name you may give a headset on the Headsets tab (such as
+"Station 1"), both kept in the app's private storage on the phone so they are
+still there next time. Nothing is backed up — the app sets
 `allowBackup="false"` — and uninstalling the app removes it.
 
 ## Bluetooth and location permissions

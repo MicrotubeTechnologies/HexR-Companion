@@ -28,53 +28,54 @@ HEXR Companion
 ### Short description — 80 max [77]
 
 ```
-Bluetooth bench tester for HEXR haptic gloves — drive, measure, pass or fail.
+Test HEXR haptic gloves over Bluetooth, and watch a HEXR headset's view live.
 ```
 
-### Full description — 4000 max [3496]
+### Full description — 4000 max [3634]
 
 ```
-HEXR Companion connects to a HEXR pneumatic haptic glove over Bluetooth LE and tells you whether it works.
+HEXR Companion connects to a HEXR pneumatic haptic glove over Bluetooth LE and tells you whether it works. At an event, it also shows you what a HEXR headset's wearer sees, with their gloves lighting up beside the view as they are touched.
 
-It is the phone version of the desktop HEXR Companion, and it speaks the same wire protocol against the same verdict thresholds — so a glove that passes on a bench laptop passes here, and a result recorded on either means the same thing.
-
-THREE QUESTIONS IT ANSWERS
-
-• Does this glove work? Run the quick test and read the verdicts.
-• What does this setting feel like? Drive a channel and put your hand in it.
-• Why is this one weak? Watch the live pressure while it fires.
+It is the phone version of the desktop HEXR Companion, with the same glove on screen and the same verdict thresholds, so a glove that passes on a bench laptop passes here, and a result recorded on either means the same thing.
 
 CONNECT
 
-Open the app and scan. Connect the left glove, the right, or both at once — they are separate Bluetooth devices and the app drives them independently — and testing starts as soon as one connects. The Bluetooth button then shows each glove's battery, its source pressure, its address and the negotiated MTU, says whether telemetry is actually streaming, and connects the other glove.
+Switch on the arm module and open the app. It searches by itself and shows two gloves, left and right, each lighting up as it connects, with its battery. Connect one or both: they are separate Bluetooth devices and the app drives them independently.
 
 TEST
 
-A tappable diagram of the glove stands in for a list of channel names. Select any of the six channels — thumb, index, middle, ring, pinky, palm — set intensity from 0 to 100%, and choose steady pressure or vibration from 1 to 20 Hz. Trigger, and each channel's live pressure fills its own shape in the diagram, so a weak channel is visibly paler than a healthy one at a glance. Release all vents every channel, whatever happens to be selected.
+The glove is the screen. Tap a fingertip or the palm to pick it, or tick it in the list underneath, which shows each finger's air pressure against where it is set to go, and the air supply. Choose Pressure or Vibration, set the intensity and, for a vibration, the frequency, from a slow 0.1 Hz pulse to a 40 Hz buzz. Trigger sends it and Release all lets every finger go, both in a bar along the bottom within a thumb's reach. The glove glows where it measures pressure and rings where it vibrates.
 
 QUICK TEST
 
-One button on the Test screen runs the canned sweep: every channel driven to full for two seconds, with peak pressure and time-to-peak recorded for each. Every channel comes back Good, Poor or Fail under one plain-English headline — and a dead pump is reported as one fault in the pump, not as six failed channels, so nobody goes replacing the wrong part.
+One button answers one question: is this glove healthy? Every finger is driven to full for two seconds, and the answer comes in one line, shown on the glove itself with each finger green, amber or red:
 
-• Good — above 40 kPa, full pressure
-• Poor — 2 to 40 kPa, moved but never reached full
-• Fail — under 2 kPa, not working
+• All good: every finger above 40 kPa
+• Poor: it moved but never reached full pressure; check its tubing
+• Failed: under 2 kPa with the air supply healthy; a blocked line, a valve or an indenter
+• Pump failed: the supply itself never rose, reported as one fault, not six
+
+Each finger's peak pressure and time to peak are under Details.
 
 HEADSETS
 
-At an event, the Headsets tab finds every HEXR headset on the same Wi-Fi and looks after them from the phone, without taking a headset off anyone. Connect and disconnect each headset's gloves, see their battery and pressures, switch the scene, and — once the person wearing it agrees in the headset — watch what they see. Name each headset so you know which station is which. Headsets need a HEXR app built with HEXR 0.10.0 or newer with HEXR Remote added.
+The Headsets tab finds every HEXR headset on the same Wi-Fi. Open one and, once the wearer agrees in the headset, watch what they see live, with their two gloves under the view lighting up in step with the picture as each touch lands. Connect or disconnect the headset's gloves by tapping them, release every finger, and recenter the wearer on the scene's starting spot. Turn the phone sideways for a full-screen view to show an audience, and name each headset so you know which station is which. Headsets need a HEXR app built with HEXR 0.10.0 or newer with HEXR Remote added; the live glove view needs 0.10.2, and Recenter 0.11.0.
+
+ENGLISH AND CHINESE
+
+Switch between English and 中文 from the menu at any time.
 
 SAFE BY DEFAULT
 
-Channels vent when you leave the Test screen, when a glove disconnects, and the moment the app goes to the background. A phone gets pocketed mid-test in a way a bench laptop does not, and a channel left inflated presses on someone's hand until the battery dies.
+Every finger is released when you leave the Test screen, press Back while one is on, or the app goes to the background. A phone gets pocketed mid-test in a way a bench laptop does not, and a finger left inflated presses on someone's hand until the battery dies.
 
 NO ACCOUNT, NOTHING SENT AWAY
 
-Gloves are reached over Bluetooth, and headsets over your own Wi-Fi; the app contacts no server on the internet. It collects nothing and sends nothing to Microtube or anyone else. The only thing it keeps after you close it is the names you give headsets.
+Gloves are reached over Bluetooth, and headsets over your own Wi-Fi; the app contacts no server on the internet. It collects nothing and sends nothing to Microtube or anyone else. All it keeps after you close it is the language you picked and the names you give headsets.
 
 WHAT YOU NEED
 
-Android 8.0 or newer, Bluetooth LE, and a HEXR glove. The glove is the whole point — without one there is nothing for the app to connect to.
+Android 8.0 or newer, Bluetooth LE, and a HEXR glove. The glove is the whole point: without one there is nothing for the app to connect to.
 
 This is a test and diagnostic instrument, not a runtime. HEXR gloves have no consumer companion app and do not pair through Android's Bluetooth settings. To build something with HEXR you integrate the com.microtube.hexr Unity package or the Python library; the glove does not need this app to work with your application.
 
@@ -94,21 +95,24 @@ Connect searches by itself and lights each glove as it connects. Test: tap a fin
 ## Screenshots
 
 Upload in this order. The first one is what shows in search results, so the
-glove diagram mid-drive leads: it is the only image that explains what the app
-is for without reading anything.
+glove mid-drive leads: it is the one image that explains what the app is for
+without reading anything. Captured at 1080x1920 from a debug build seeded by
+`DemoSeed.kt` (`adb shell am start -S -n com.microtube.hexr.tester.debug/com.microtube.hexr.MainActivity --es demo <scenario>`),
+the headset one against `tools/fake_headset.py` on the computer running the
+emulator (`--es demo headsets --es host 10.0.2.2 --ez watch true`).
 
-| # | File | What it shows |
-|---|---|---|
-| 1 | `02-test-driving.png` | Six channels lit at varying pressure, Trigger showing Active |
-| 2 | `03-quick-test-pass.png` | Green "All 6 channels good" over the results table |
-| 3 | `04-quick-test-fail.png` | Red "1 of 6 channels failed" with the diagnostic paragraph |
-| 4 | `01-connect.png` | Both gloves connected and streaming, battery and source tiles |
-| 5 | `05-splash.png` | The HEXR lockup |
+| # | File | Scenario | What it shows |
+|---|---|---|---|
+| 1 | `01-test-driving.png` | `driving` | Five fingers lit, the ring finger visibly weaker, Trigger and a red Release all |
+| 2 | `02-quick-test-fail.png` | `quick-fail` | "1 failed" in red, the glove green with a red ring finger and an amber pinky |
+| 3 | `03-headset-live.png` | `headsets` + fake headset | The wearer's view, the two gloves under it lighting up |
+| 4 | `04-connect.png` | `connecting` | Two gloves, one connecting and one found, Connect under it |
+| 5 | `05-test-chinese.png` | `vibration`, 中文 | A vibration on two fingers, rings on the glove, the screen in Chinese |
 
-Tablet screenshots are deliberately not supplied. The app is authored against a
-390x844 dp phone; `TestScreen` is a fixed-height layout with no scroll and has
-had no large-screen design pass, so a tablet screenshot would be an honest
-picture of a layout nobody designed.
+Tablet screenshots are deliberately not supplied. The app is designed for
+phones from 360x640 dp up, with two columns for a phone on its side; it has had
+no tablet design pass, so a tablet screenshot would be an honest picture of a
+layout nobody designed.
 
 ---
 
@@ -117,19 +121,20 @@ picture of a layout nobody designed.
 ### App access — the one that gets apps rejected
 
 **All or some functionality is restricted.** Every screen in this app is a view
-onto a glove. A reviewer without one sees a scan that finds nothing and dashes
-where the readings should be, and "we could not test the app" is a rejection,
-not a question.
+onto a glove or a HEXR headset. A reviewer without one sees two dimmed gloves
+searching for ever and an empty Headsets list, and "we could not test the app"
+is a rejection, not a question.
 
 Provide, in the App access section:
 
 - Instructions saying the app requires HEXR pneumatic haptic glove hardware
   from Microtube Technologies, that the hardware is not publicly purchasable,
   and that the app is a service tool for technicians.
-- **A screen recording made on a real phone with a real glove**, showing scan,
-  connect, a channel driven, and a quick test running to a verdict. This is the
-  one asset the emulator cannot stand in for, and it is what turns a blocked
-  review into a passed one.
+- **A screen recording made on a real phone with a real glove**, showing the
+  glove connecting, a finger driven with Trigger and Release all, and a quick
+  test running to its answer; ideally also a headset opened on the Headsets tab
+  and watched. This is the one asset the emulator cannot stand in for, and it is
+  what turns a blocked review into a passed one.
 
 No login credentials exist to supply — there are no accounts.
 
@@ -141,9 +146,14 @@ No login credentials exist to supply — there are no accounts.
 | Is all of the user data collected by your app encrypted in transit? | n/a — nothing is collected |
 | Do you provide a way for users to request that their data is deleted? | n/a — nothing is collected |
 
-Backed by the manifest: there is no `INTERNET` permission, so the app cannot
-open a network connection, and `allowBackup="false"` keeps the OS from copying
-anything off the device. Telemetry lives in memory for the life of the process.
+The manifest declares `INTERNET`, which Android requires for any network
+connection, even one that never leaves the room: the Headsets tab uses it to
+reach HEXR headsets on the same Wi-Fi, and nothing else. No server on the
+internet is contacted, and nothing goes to Microtube or a third party, which is
+what the form means by collected and shared. `allowBackup="false"` keeps the OS
+from copying anything off the device. Telemetry and the headset's view live in
+memory for the life of the process; the language picked and any headset names
+are kept on the phone.
 
 ### Privacy policy
 
@@ -151,9 +161,8 @@ anything off the device. Telemetry lives in memory for the life of the process.
 https://microtubetechnologies.github.io/HexR-Companion/privacy.html
 ```
 
-Served by GitHub Pages from `docs/` on `main` — see `docs/privacy.html`. It only
-goes live once this work is merged to `main` **and** Pages is switched on at
-Settings → Pages → Deploy from a branch → `main` → `/docs`.
+Served by GitHub Pages from `docs/` on `main` (see `docs/privacy.html`), and
+live. A change to the policy goes live when it reaches `main`.
 
 ### Permissions
 

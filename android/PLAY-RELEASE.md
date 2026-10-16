@@ -1,7 +1,8 @@
 # Shipping HEXR Companion to the Play Store
 
-Everything needed to put version **1.0.0** of the Android app on Google Play,
-in the order you need it.
+Everything needed to put the Android app on Google Play, in the order you need
+it. The current release is **1.2.0**: see *Releasing 1.2.0* at the end for the
+short list.
 
 The sideload route in [README.md](README.md) does not change. A technician still
 opens an APK from the Actions tab. This is the second, parallel route, for the
@@ -29,13 +30,13 @@ it only decides where `R` and `BuildConfig` are generated. Leave it alone.
 
 ---
 
-## What version 1.0.0 produces
+## What version 1.2.0 produces
 
 | | |
 |---|---|
 | Package name | `com.microtube.hexr.tester` |
-| Version name | `1.0.0` (from the repository's `VERSION` file) |
-| Version code | `10000` |
+| Version name | `1.2.0` (from the repository's `VERSION` file) |
+| Version code | `10200` |
 | Format | Android App Bundle (`.aab`) |
 | Min / target SDK | 26 (Android 8.0) / 36 (Android 16) |
 | Signing | upload key, then Play App Signing |
@@ -143,11 +144,11 @@ checkout, with the tests in front of it. Add four repository secrets
 then tag:
 
 ```
-git tag android-v1.0.0 && git push origin android-v1.0.0
+git tag android-v1.2.0 && git push origin android-v1.2.0
 ```
 
 The run publishes the usual GitHub Release with the sideload APK, and attaches
-`HexR-Companion-1.0.0.aab` as a **workflow artifact** — deliberately not a release
+`HexR-Companion-1.2.0.aab` as a **workflow artifact** — deliberately not a release
 asset. An `.aab` cannot be installed on a phone, and a download button offering
 one next to the APK is a support ticket waiting to happen.
 
@@ -184,9 +185,8 @@ nothing. The published copy is `docs/privacy.html`, served by GitHub Pages:
 https://microtubetechnologies.github.io/HexR-Companion/privacy.html
 ```
 
-That URL is dead until two things happen: this work reaches `main`, and Pages is
-switched on at *Settings → Pages → Deploy from a branch → `main` → `/docs`*.
-Check it loads before pasting it into the Console. [PRIVACY.md](PRIVACY.md) is
+It is live, served from `docs/` on `main`. A change to the policy goes live when
+it reaches `main`; check it loads before pasting it into the Console. [PRIVACY.md](PRIVACY.md) is
 the source text; the contact line currently points at the repository's issue
 tracker, which is a real channel but not the company mailbox a customer expects.
 
@@ -220,8 +220,8 @@ the sideload package is cheap now and awkward once the Play build exists.
 The cost, once: a technician who already has the old sideload gets the next one
 as a *second* app rather than an upgrade, and should uninstall the old one. Both
 apps look identical in the launcher, which is the one thing to watch for when
-someone reports a bug against "the app" — the build line at the bottom of the
-scan screen (or the Gloves panel) is what tells them apart.
+someone reports a bug against "the app" — the build line under Details on the
+Connect screen (or the Gloves panel) is what tells them apart.
 
 ---
 
@@ -235,6 +235,31 @@ scan screen (or the Gloves panel) is what tells them apart.
   visible line, without a binary jar in the tree.
 - **No Play Publisher plugin.** The upload is a manual Console step. One release
   a quarter does not justify a service account with release permissions.
-- **No tablet screenshots.** The app is drawn against a 390x844 dp phone and
-  `TestScreen` is a fixed-height layout with no scroll. It would need a
-  large-screen pass before a tablet screenshot was worth showing anyone.
+- **No tablet screenshots.** The app is designed for phones from 360x640 dp up,
+  with two columns for a phone on its side. It would need a tablet design pass
+  before a tablet screenshot was worth showing anyone.
+
+---
+
+## Releasing 1.2.0
+
+1.2.0 is the redesign: the orange HEXR glove on every screen, Connect that
+searches by itself, Test by tapping the glove, a quick test that colours it, the
+Headsets tab's live view with the gloves lighting up beside it, and English and
+Chinese. Same package name, so it is an update to whatever is already on Play.
+
+1. **The bundle.** `gradle testDebugUnitTest bundleRelease` with the upload key
+   (or the `android-v1.2.0` tag in CI). The result is
+   `app/build/outputs/bundle/release/app-release.aab`, version code 10200.
+   Confirm the certificate with `keytool -printcert -jarfile` (valid to 2054).
+2. **Screenshots.** The five in [play/listing.md](play/listing.md), captured from
+   the debug build's demo scenarios; the old ones show a design that is gone.
+3. **Listing text.** Short and full description and What's new are in
+   play/listing.md, rewritten for 1.2.0. Paste all three: the old full
+   description still mentions switching scenes, which the app no longer does.
+4. **App access.** Replace the reviewer video if it shows the old screens.
+5. **Data safety.** Unchanged: nothing collected or shared. The language picked
+   is now stored on the phone too, which the privacy policy says; that change
+   goes live when `docs/privacy.html` reaches `main`.
+6. **Track.** Internal testing first; install from the Play link on a phone with a
+   glove and a headset to hand, then promote.

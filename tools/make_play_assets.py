@@ -72,6 +72,7 @@ FONT_CANDIDATES = {
     "black": ("seguibl.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"),
     "semibold": ("seguisb.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"),
     "bold": ("segoeuib.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"),
+    "regular": ("segoeui.ttf", "arial.ttf", "DejaVuSans.ttf"),
 }
 FONT_DIRS = ("C:/Windows/Fonts", "/usr/share/fonts/truetype/dejavu",
              "/Library/Fonts", "/System/Library/Fonts")
@@ -151,7 +152,7 @@ def render_launcher(size=512):
 # -- the feature graphic -----------------------------------------------------
 
 FEATURE_W, FEATURE_H = 1024, 500
-TAGLINE = "Bench diagnostics for HEXR haptic gloves"
+TAGLINE = "Test HEXR haptic gloves, and watch HEXR headsets live"
 
 
 def _vignette(size):
@@ -181,19 +182,17 @@ def render_feature():
     d = ImageDraw.Draw(layer)
 
     mark_h = 168 * SS
-    wordmark = font("black", 92 * SS)
-    pill_font = font("bold", 23 * SS)
+    wordmark = font("black", 84 * SS)
+    name_font = font("regular", 84 * SS)
     tag_font = font("semibold", 27 * SS)
-    word_track, pill_track, tag_track = 8 * SS, 2.6 * SS, 1.2 * SS
+    word_track, name_track, tag_track = 6 * SS, 1 * SS, 1.2 * SS
 
-    # Measure the lockup row before placing it: HEXR, gap, TESTER pill.
+    # Measure the lockup row before placing it: HEXR in orange, Companion in
+    # white, as the app's header and splash set them.
     word_w = tracked_width("HEXR", wordmark, word_track)
-    pill_text_w = tracked_width("TESTER", pill_font, pill_track)
-    pill_pad_x, pill_pad_y = 16 * SS, 10 * SS
-    pill_w = pill_text_w + pill_pad_x * 2
-    pill_h = pill_font.size + pill_pad_y * 2
-    gap = 24 * SS
-    row_w = word_w + gap + pill_w
+    name_w = tracked_width("Companion", name_font, name_track)
+    gap = 22 * SS
+    row_w = word_w + gap + name_w
     row_h = wordmark.size
 
     tag_w = tracked_width(TAGLINE, tag_font, tag_track)
@@ -203,15 +202,10 @@ def render_feature():
 
     row_x = (w - row_w) / 2
     row_y = top + mark_h + 40 * SS
-    draw_tracked(d, row_x, row_y, "HEXR", wordmark, TEXT, word_track)
-
-    # The TESTER pill sits on the wordmark's optical centre, matching Header().
-    pill_x = row_x + word_w + gap
-    pill_y = row_y + (row_h - pill_h) / 2 + 5 * SS
-    d.rounded_rectangle((pill_x, pill_y, pill_x + pill_w, pill_y + pill_h),
-                        radius=8 * SS, fill=CARD)
-    draw_tracked(d, pill_x + pill_pad_x, pill_y + pill_pad_y,
-                 "TESTER", pill_font, TEXT_3, pill_track)
+    draw_tracked(d, row_x, row_y, "HEXR", wordmark, ACCENT, word_track)
+    # On HEXR's baseline: the two faces have different ascents.
+    name_y = row_y + wordmark.getmetrics()[0] - name_font.getmetrics()[0]
+    draw_tracked(d, row_x + word_w + gap, name_y, "Companion", name_font, TEXT, name_track)
 
     # Bigger than the 40 above the wordmark, and it still reads as the smaller
     # of the two gaps: HEXR's line box already ends well below its baseline, so
