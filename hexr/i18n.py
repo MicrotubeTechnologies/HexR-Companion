@@ -184,7 +184,6 @@ ZH: dict[str, str] = {
     "Connecting to the view…": "正在连接画面…",
     "Record": "录制",
     "Full screen": "全屏",
-    "Square": "方形",
     "Off": "关",
     "The glove could not be drawn: {error}": "无法绘制手套：{error}",
     "The glove shows the pressure the gloves measure. Update this app to HexR 0.10.2 or newer to "
@@ -260,9 +259,7 @@ ZH: dict[str, str] = {
     "Exporting… {pct}%": "正在导出… {pct}%",
     "Export again": "再次导出",
     "Export": "导出",
-    "Exporting another recording…": "正在导出另一段录像…",
     "Exported · Show in folder": "已导出 · 在文件夹中显示",
-    "No preview": "无预览",
     "Landscape": "横屏",
     "Portrait": "竖屏",
     "Recordings": "录像",
@@ -270,4 +267,7 @@ ZH: dict[str, str] = {
     "No recordings yet": "还没有录像",
     "Record a headset's view in Headsets.": '在“头显”中录制头显画面。',
     "Go to Headsets": "前往头显",
+    "View only": "仅画面",
+    "Exporting {shape}… {pct}%": "正在导出{shape}… {pct}%",
+    "Exporting another recording… {pct}%": "正在导出另一段录像… {pct}%",
 }

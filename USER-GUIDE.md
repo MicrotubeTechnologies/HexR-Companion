@@ -328,15 +328,22 @@ On a Mac the Headsets screen controls headsets but cannot show their view yet.
 Every recording made on the Headsets screen, newest first, ready to make into a
 video to share.
 
-1. **Pick a recording** in the list.
-2. **Pick a shape.** The preview shows it, at the moment the gloves were
-   busiest.
+1. **Pick a recording** in the list. The player above the shapes opens on the
+   moment the gloves were busiest. **▶** plays it from the start, exactly as
+   the export will look; click the picture to pause, and drag the bar to move
+   through it.
+2. **Pick a shape.** The player switches to it straight away.
 
    | Shape | Size | For |
    |---|---|---|
    | **Landscape** | 1920 × 1080 | YouTube, a TV: the view, the gloves to its right |
    | **Portrait** | 1080 × 1920 | YouTube Shorts, phones: the view, the gloves under it |
-   | **Square** | 1080 × 1080 | The view alone, no gloves |
+   | **View only** | the view's own shape | The view alone, no gloves |
+
+   A Quest's view is square. A headset whose view is wide still gets these
+   shapes: in landscape the view takes three quarters of the width, with thin
+   bands above and below, and in portrait it runs across the top with more room
+   for the gloves under it.
 
 3. **Export.** A minute of recording takes about a minute and a half. **Stop**
    cancels it. The video goes in *Videos\HEXR Companion\Exports*, named after

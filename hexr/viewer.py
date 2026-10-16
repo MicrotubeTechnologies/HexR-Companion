@@ -1,10 +1,13 @@
 """What a headset's view turns into: the view beside its gloves.
 
-The headset sends a square view, and it is shown whole. Beside it goes a panel for each glove:
-landscape (16:9) puts them to the right of the view, the left hand above the right; portrait
-(9:16) puts them under it, side by side. Those are YouTube's two shapes. Square is the view
-alone. Each panel lights its glove where the wearer is being touched, and says whether the
-headset has that glove, and its battery. Nothing is drawn over the view itself.
+The view is shown whole, in its own shape (a Quest's is square). Beside it goes a panel for
+each glove. Landscape (16:9) puts the view on the left, as big as leaves the gloves at least a
+quarter of the width, and the gloves to its right; portrait (9:16) puts the view across the top
+and the gloves in the room under it. Those are YouTube's two shapes, whatever the view's. The two
+panels share the gloves' room side by side or one above the other, whichever draws the gloves
+bigger. View only is the view alone, in its own shape. Each panel lights its glove where the
+wearer is being touched, and says whether the headset has that glove, and its battery. Nothing
+is drawn over the view itself.
 
 The Headsets screen and full screen show landscape; an export (hexr/exporter.py) draws any of
 the three from a recording. Like the glove, the panels' words are English: they are part of the
@@ -25,10 +28,11 @@ from . import theme as T
 from .haptics import HandState, HapticsTimeline
 from .overlay import GLOVE_ASPECT, SS, GloveOverlay, OverlayLook, panel_size
 
-LANDSCAPE, PORTRAIT, SQUARE = "landscape", "portrait", "square"
-LAYOUTS = (LANDSCAPE, PORTRAIT, SQUARE)
-SIZE = {LANDSCAPE: (1920, 1080), PORTRAIT: (1080, 1920), SQUARE: (1080, 1080)}
+LANDSCAPE, PORTRAIT, VIEW = "landscape", "portrait", "view"
+LAYOUTS = (LANDSCAPE, PORTRAIT, VIEW)
+SIZE = {LANDSCAPE: (1920, 1080), PORTRAIT: (1080, 1920), VIEW: (1920, 1080)}   # VIEW: at most
 HANDS = ("left", "right")
+GLOVES_AT_LEAST = .25        # of the picture's long side, for the gloves, however wide the view
 
 # The glove in a panel: the panel is its backdrop and carries its name, and the caption sits
 # under it. A finger firing is named beside it, while one or two are: more, and the names
@@ -47,7 +51,7 @@ def _rgb(colour: str) -> tuple[int, int, int]:
 
 
 BACKGROUND = _rgb(T.CANVAS)
-SCREEN = _rgb(T.RAISED)      # the view's square, while there is no view in it
+SCREEN = _rgb(T.RAISED)      # the view's place, while there is no view in it
 PANEL = _rgb(T.RAISED)
 PANEL_EDGE = _rgb(T.BORDER_SOFT)
 NAME = (150, 151, 154)
@@ -74,12 +78,11 @@ def badge_of(badges: tuple, hand: str) -> GloveBadge:
 
 # -- where things go ---------------------------------------------------------------------------
 
-def frame_size(fit: tuple[int, int] | None, layout: str) -> tuple[int, int]:
-    """The picture's size: the largest of its shape that fits inside `fit`, in even pixels as
-    a video needs; an export's own size without one."""
-    if fit is None:
-        return SIZE[layout]
-    w, h = float(fit[0]), float(fit[1])
+def frame_size(fit: tuple[int, int] | None, layout: str, aspect: float = 1.0) -> tuple[int, int]:
+    """The picture's size: the largest of its shape that fits inside `fit`, or an export's own
+    size without one, in even pixels as a video needs. View only takes the view's `aspect`
+    (width / height)."""
+    w, h = (float(v) for v in (fit or SIZE[layout]))
     if layout == LANDSCAPE:
         w = min(w, h * 16 / 9)
         h = w * 9 / 16
@@ -87,7 +90,8 @@ def frame_size(fit: tuple[int, int] | None, layout: str) -> tuple[int, int]:
         h = min(h, w * 16 / 9)
         w = h * 9 / 16
     else:
-        w = h = min(w, h)
+        w = min(w, h * aspect)
+        h = w / aspect
     return max(2, int(w) // 2 * 2), max(2, int(h) // 2 * 2)
 
 
@@ -101,23 +105,39 @@ class Boxes:
         return self.left if hand == "left" else self.right
 
 
-def boxes(size: tuple[int, int], layout: str) -> Boxes:
-    """The view's square and each glove's panel, as (x0, y0, x1, y1), in a picture this big."""
+def boxes(size: tuple[int, int], layout: str, aspect: float = 1.0) -> Boxes:
+    """The view's place and each glove's panel, as (x0, y0, x1, y1), in a picture this big, for
+    a view `aspect` wide to its height."""
     w, h = size
+    if layout == VIEW:
+        return Boxes((0, 0, w, h), None, None)
+    g = max(2, round(min(w, h) * .014))
     if layout == LANDSCAPE:
-        s, g = h, max(2, round(h * .014))
-        half = (h - 3 * g) // 2
-        return Boxes((0, 0, s, s), (s + g, g, w - g, g + half), (s + g, 2 * g + half, w - g, h - g))
-    if layout == PORTRAIT:
-        s, g = w, max(2, round(w * .014))
-        half = (w - 3 * g) // 2
-        return Boxes((0, 0, s, s), (g, s + g, g + half, h - g), (2 * g + half, s + g, w - g, h - g))
-    return Boxes((0, 0, w, h), None, None)
+        vw = min(round(h * aspect), round(w * (1 - GLOVES_AT_LEAST)) - g)
+        vh = min(h, round(vw / aspect))
+        view = (0, (h - vh) // 2, vw, (h - vh) // 2 + vh)
+        room = (vw + g, g, w - g, h - g)
+    else:
+        vh = min(round(w / aspect), round(h * (1 - GLOVES_AT_LEAST)) - g)
+        vw = min(w, round(vh * aspect))
+        view = ((w - vw) // 2, 0, (w - vw) // 2 + vw, vh)
+        room = (g, vh + g, w - g, h - g)
+    return Boxes(view, *_two_panels(room, g))
 
 
-def hit(size: tuple[int, int], layout: str, x: float, y: float) -> str | None:
+def _two_panels(room, g):
+    """The gloves' room split in two, side by side or one above the other: whichever draws
+    the gloves bigger. The left hand is the first, so on the left or on top."""
+    x0, y0, x1, y1 = room
+    mx, my = (x0 + x1 - g) // 2, (y0 + y1 - g) // 2
+    beside = ((x0, y0, mx, y1), (mx + g, y0, x1, y1))
+    stacked = ((x0, y0, x1, my), (x0, my + g, x1, y1))
+    return stacked if glove_height(stacked[0]) >= glove_height(beside[0]) else beside
+
+
+def hit(size: tuple[int, int], layout: str, x: float, y: float, aspect: float = 1.0) -> str | None:
     """What a point in the picture is on: "view", "left", "right", or None between them."""
-    b = boxes(size, layout)
+    b = boxes(size, layout, aspect)
     for name, box in (("view", b.view), ("left", b.left), ("right", b.right)):
         if box and box[0] <= x < box[2] and box[1] <= y < box[3]:
             return name
@@ -154,6 +174,7 @@ class Compositor:
     def __init__(self, timeline: HapticsTimeline | None = None, badges: tuple = ()):
         self.timeline = timeline
         self.badges = badges
+        self.aspect = 1.0          # the view's shape while there is no frame to say
         self._overlay = GloveOverlay()
         self._gh = 0
         self._base: tuple | None = None          # ((size, layout), image)
@@ -171,7 +192,7 @@ class Compositor:
         """The picture with nothing in the view's square and the gloves as they are now; None
         when that is what was drawn last time, so the screen has nothing to do."""
         states = {h: self.timeline.state(h, 0, now) for h in HANDS}
-        key = (frame_size(fit, LANDSCAPE), self.badges,
+        key = (frame_size(fit, LANDSCAPE), self.badges, round(self.aspect, 3),
                tuple(_state_key(states[h]) for h in HANDS))
         if key == self._idle_key:
             return None
@@ -180,11 +201,12 @@ class Compositor:
 
     def draw(self, frame, states: dict[str, HandState], badges: tuple, layout: str,
              fit: tuple[int, int] | None = None) -> Image.Image:
-        """The view (an av.VideoFrame, or None for an empty square) and, unless the layout is
-        square, the gloves beside it: as big as fits inside `fit`, or the export's size."""
-        size = frame_size(fit, layout)
-        img = self._background(size, layout)
-        b = boxes(size, layout)
+        """The view (an av.VideoFrame, or None for an empty place) and, unless the layout is
+        the view only, the gloves beside it: as big as fits inside `fit`, or the export's size."""
+        aspect = frame.width / frame.height if frame is not None else self.aspect
+        size = frame_size(fit, layout, aspect)
+        img = self._background(size, layout, aspect)
+        b = boxes(size, layout, aspect)
         if frame is not None:
             self._paste_view(img, frame, b.view)
         if b.left:
@@ -199,10 +221,11 @@ class Compositor:
 
     # -- the parts -----------------------------------------------------------------------------
 
-    def _background(self, size: tuple[int, int], layout: str) -> Image.Image:
-        """A fresh copy of what never changes: the background, the square, the empty panels."""
-        if self._base is None or self._base[0] != (size, layout):
-            b = boxes(size, layout)
+    def _background(self, size: tuple[int, int], layout: str, aspect: float) -> Image.Image:
+        """A fresh copy of what never changes: the background, the view's place, the panels."""
+        key = (size, layout, round(aspect, 3))
+        if self._base is None or self._base[0] != key:
+            b = boxes(size, layout, aspect)
             big = Image.new("RGB", (size[0] * SS, size[1] * SS), BACKGROUND)
             d = ImageDraw.Draw(big)
             d.rectangle([v * SS for v in b.view], fill=SCREEN)
@@ -217,13 +240,12 @@ class Compositor:
                        "LEFT HAND" if hand == "left" else "RIGHT HAND",
                        font=self._font("Inter-Bold.ttf", unit * .055 * SS), fill=NAME,
                        anchor="lm")
-            self._base = ((size, layout), big.resize(size, Image.LANCZOS))
+            self._base = (key, big.resize(size, Image.LANCZOS))
         return self._base[1].copy()
 
     def _paste_view(self, img: Image.Image, frame, box):
-        """The headset's view, whole, as big as fits in the square."""
-        s = min(box[2] - box[0], box[3] - box[1])
-        scale = min(s / frame.width, s / frame.height)
+        """The headset's view, whole, as big as fits in its place."""
+        scale = min((box[2] - box[0]) / frame.width, (box[3] - box[1]) / frame.height)
         w, h = max(2, round(frame.width * scale)), max(2, round(frame.height * scale))
         img.paste(to_image(frame, w, h),
                   (box[0] + (box[2] - box[0] - w) // 2, box[1] + (box[3] - box[1] - h) // 2))

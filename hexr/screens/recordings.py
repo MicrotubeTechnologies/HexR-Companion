@@ -1,13 +1,15 @@
 """The Recordings screen: what was recorded from a headset, made into videos to share.
 
 A recording is the headset's view as it came and what its gloves did (hexr/recorder.py). Pick
-one, pick a shape (landscape and portrait are YouTube's two, the gloves beside the view; square
-is the view alone) and Export draws the two together into a video in the Exports folder. The
-preview shows that shape at the moment the gloves were busiest. The same recording can be
-exported in every shape.
+one, pick a shape (landscape and portrait are YouTube's two, the gloves beside the view, whatever
+the view's own shape; view only is the view alone) and Export draws the two together into a video in the Exports folder. The
+same recording can be exported in every shape.
 
-Reading thumbnails and drawing previews means decoding video, so it happens on a worker thread
-and the screen picks the results up on its tick.
+The picture above the shapes is a player: it plays the recording as the export will look, in
+the shape picked. It opens on the moment the gloves were busiest; Play starts from the top.
+
+Reading thumbnails means decoding video, so it happens on a worker thread, and the player has
+a thread of its own (hexr/player.py); the screen picks up what they made.
 """
 
 from __future__ import annotations
@@ -25,15 +27,18 @@ from .. import recorder as REC
 from .. import settings
 from .. import theme as T
 from ..i18n import N_, tr
-from ..viewer import LANDSCAPE, LAYOUTS, PORTRAIT, SQUARE
-from ..widgets import Button, Divider, Progress, Segmented, Surface, TextLink
+from ..player import Player
+from ..viewer import LANDSCAPE, LAYOUTS, PORTRAIT, VIEW
+from ..widgets import (Button, Divider, Progress, Scrubber, Segmented, Surface, TextLink,
+                       icon_pause, icon_play)
 from .base import SETTINGS_FILE, Screen
 
 LIST_W = 330
 PREVIEW = (540, 400)          # the room the preview has
 THUMB = 56
 RESCAN_EVERY = 40             # ticks between looks at the folder: 2 s at 20 Hz
-SHAPES = {LANDSCAPE: N_("Landscape"), PORTRAIT: N_("Portrait"), SQUARE: N_("Square")}
+PUMP_MS = 15                  # how often a playing recording's newest picture is put up
+SHAPES = {LANDSCAPE: N_("Landscape"), PORTRAIT: N_("Portrait"), VIEW: N_("View only")}
 
 
 class RecordingsScreen(Screen):
@@ -49,7 +54,9 @@ class RecordingsScreen(Screen):
         self._thumbs: dict[str, tuple[float, object]] = {}    # path -> (seconds, PhotoImage)
         self._export: X.Export | None = None
         self._preview_photo = None
-        self._preview_want = None
+        self.player: Player | None = None
+        self._poster = True           # the player shows its opening picture, not yet played
+        self._pumping = False
         self._error = ""
         # Labels are sized in characters until they hold a picture: blanks keep them in pixels.
         self._blank_thumb = tk.PhotoImage(master=self, width=THUMB, height=THUMB)
@@ -81,8 +88,24 @@ class RecordingsScreen(Screen):
         right.pack(side="left", fill="both", expand=True, padx=(24, 0))
 
         self.preview = tk.Label(right, bg=T.SURFACE, bd=0, image=self._blank_preview,
-                                compound="center", text="", fg=T.TEXT_FAINT, font=T.font(12.5))
+                                compound="center", text="", fg=T.TEXT_FAINT, font=T.font(12.5),
+                                cursor="hand2")
         self.preview.pack(anchor="w")
+        self.preview.bind("<Button-1>", lambda e: self._play_pause())
+
+        # -- play, where it is, how long
+        bar = tk.Frame(right, bg=T.SURFACE)
+        bar.pack(fill="x", pady=(10, 0))
+        self.play_btn = Button(bar, "", icon=icon_play, command=self._play_pause, height=34,
+                               fill=T.INSET, fg=T.TEXT, border=T.BORDER, hover_fill=T.INSET,
+                               hover_fg=T.ACCENT, hover_border=T.ACCENT)
+        self.play_btn.pack(side="left")
+        self.clock = tk.Label(bar, text="0:00 / 0:00", bg=T.SURFACE, fg=T.TEXT_MUTED,
+                              font=T.mono(11.5))
+        self.clock.pack(side="right")
+        self.scrubber = Scrubber(bar, command=self._scrubbed)
+        self.scrubber.pack(side="left", fill="x", expand=True, padx=(12, 12))
+
         self.shape = Segmented(right, [(k, tr(v)) for k, v in SHAPES.items()],
                                value=self.layout, command=self._pick_shape)
         self.shape.pack(anchor="w", pady=(16, 0))
@@ -98,6 +121,12 @@ class RecordingsScreen(Screen):
 
     def on_show(self):
         self._rescan()
+        self._start_pump()
+
+    def on_hide(self):
+        if self.player:
+            self.player.pause()
+        self._pumping = False
 
     def open(self, path: str):
         """Show one recording: the Headsets screen's "Open in Recordings"."""
@@ -176,23 +205,83 @@ class RecordingsScreen(Screen):
         self.selected = path
         self._error = ""
         self._paint_rows()
-        self._ask_preview()
+        self._load_player()
         self._refresh_export()
 
     def _pick_shape(self, layout: str):
         self.layout = layout
         _save_layout(layout)
-        self._ask_preview()
+        if self.player:
+            self.player.set_shape(layout, PREVIEW)
         self._refresh_export()
 
-    def _ask_preview(self):
+    # -- playing -------------------------------------------------------------------------------
+
+    def _load_player(self):
+        if self.player:
+            self.player.close()
+            self.player = None
         rec = self._current()
         if rec is None:
             return
-        self._preview_want = (rec.path, self.layout)
+        self.player = Player(rec, self.layout, PREVIEW)
+        self._poster = True
         self.preview.configure(image=self._blank_preview, text=tr("Loading…"))
         self._preview_photo = None
-        self._work.put(("preview", rec, self.layout))
+        self._start_pump()
+
+    def _play_pause(self):
+        p = self.player
+        if p is None or p.error:
+            return
+        if p.playing:
+            p.pause()
+        else:
+            if self._poster:
+                p.seek(0.0)
+            self._poster = False
+            p.play()
+        self._show_controls()
+
+    def _scrubbed(self, value: float):
+        if self.player and self.player.duration:
+            self._poster = False
+            self.player.seek(value * self.player.duration)
+            self._show_controls()
+
+    def _start_pump(self):
+        if not self._pumping and self.player:
+            self._pumping = True
+            self._pump()
+
+    def _pump(self):
+        """Put up the player's newest picture, often enough for a video to look smooth."""
+        if not self._pumping or not self.winfo_exists():
+            self._pumping = False
+            return
+        p = self.player
+        if p is not None:
+            image = p.latest()
+            if image is not None:
+                from PIL import ImageTk
+                if self._preview_photo is None or \
+                        (self._preview_photo.width(), self._preview_photo.height()) != image.size:
+                    self._preview_photo = ImageTk.PhotoImage(image, master=self)
+                    self.preview.configure(image=self._preview_photo, text="")
+                else:
+                    self._preview_photo.paste(image)
+            elif p.error:
+                self.preview.configure(image=self._blank_preview, text=p.error)
+        self.after(PUMP_MS, self._pump)
+
+    def _show_controls(self):
+        p = self.player
+        playing = bool(p and p.playing)
+        self.play_btn.set(icon=icon_pause if playing else icon_play, disabled=p is None)
+        position, duration = (p.position, p.duration) if p else (0.0, 0.0)
+        if duration and not self.scrubber.dragging:
+            self.scrubber.set(position / duration)
+        self.clock.configure(text=f"{_clock(position)} / {_clock(duration)}")
 
     def _current(self) -> X.Recording | None:
         return next((r for r in self.recs if r.path == self.selected), None)
@@ -233,9 +322,14 @@ class RecordingsScreen(Screen):
                                 disabled=rec is None or ex is not None, fill=T.ACCENT,
                                 fg=T.CANVAS, border=T.ACCENT, hover_fill=T.ACCENT_HOVER,
                                 hover_fg=T.CANVAS, hover_border=T.ACCENT_HOVER)
+            # One export at a time: say which one is going, until it is done.
+            pct = round(ex.progress * 100) if ex else 0
+            busy = "" if not ex else \
+                tr("Exporting {shape}… {pct}%", shape=tr(SHAPES[ex.layout]), pct=pct) \
+                if rec and ex.rec.path == rec.path else \
+                tr("Exporting another recording… {pct}%", pct=pct)
             line, colour = ((self._error, T.DANGER) if self._error else
-                            (tr("Exporting another recording…"), T.TEXT_MUTED) if ex else
-                            ("", T.TEXT_MUTED))
+                            (busy, T.TEXT_MUTED))
 
         _show(self.progress, here, fill="x", pady=(14, 0), after=self.export_btn)
         if here:
@@ -279,42 +373,24 @@ class RecordingsScreen(Screen):
                 photo = ImageTk.PhotoImage(img, master=self) if img is not None else None
                 self._thumbs[path] = (seconds, photo)
                 self._fill_thumb(path)
-            elif kind == "preview":
-                want, img, error = rest
-                if want == self._preview_want:
-                    if img is None:
-                        self.preview.configure(image=self._blank_preview,
-                                               text=error or tr("No preview"))
-                    else:
-                        from PIL import ImageTk
-                        self._preview_photo = ImageTk.PhotoImage(img, master=self)
-                        self.preview.configure(image=self._preview_photo, text="",
-                                               width=img.width, height=img.height)
+        self._show_controls()
         if self._export:
             self._refresh_export()
 
     def _worker(self):
-        """Decoding, away from the UI: thumbnails and previews, one at a time, newest wish
-        first for previews (a click on another shape makes the last one moot)."""
+        """Decoding, away from the UI: each recording's length and thumbnail, one at a time."""
         while True:
-            job = self._work.get()
-            try:
-                if job[0] == "thumb":
-                    rec = job[1]
-                    seconds, img = X.probe(rec, THUMB)
-                    self._results.put(("thumb", rec.path, seconds, img))
-                else:
-                    _kind, rec, layout = job
-                    if (rec.path, layout) != self._preview_want:
-                        continue
-                    img = X.still(rec, layout, PREVIEW)
-                    self._results.put(("preview", (rec.path, layout), img, ""))
-            except Exception as e:  # noqa: BLE001
-                if job[0] == "preview":
-                    self._results.put(("preview", (job[1].path, job[2]), None, str(e)))
+            _kind, rec = self._work.get()
+            seconds, img = X.probe(rec, THUMB)
+            self._results.put(("thumb", rec.path, seconds, img))
 
 
 # -- helpers ---------------------------------------------------------------------------------
+
+def _clock(seconds: float) -> str:
+    s = int(seconds)
+    return f"{s // 60}:{s % 60:02d}"
+
 
 def _when(rec: X.Recording, seconds: float | None = None) -> str:
     try:

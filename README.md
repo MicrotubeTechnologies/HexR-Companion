@@ -87,7 +87,8 @@ The view needs PyAV, which only the Windows build ships.
 
 **Recordings** — a recording is the view as it came and what the gloves did,
 frame by frame. Export makes it a video in landscape (1920×1080) or portrait
-(1080×1920), the view with its gloves beside it, or square, the view alone.
+(1080×1920), the view with its gloves beside it, or the view alone. The Recordings
+screen plays a recording in the shape picked before it is exported.
 
 **Escape is the panic key**, and **Release all** sits under Hold to feel on the
 Test screen. Hold to feel lets go when the window loses focus or Test is left.
@@ -208,6 +209,7 @@ hexr/
   viewer.py           the view beside its gloves: landscape, portrait or square
   recorder.py         the view as it came, and what the gloves did, recorded
   exporter.py         a recording made into a video in the shape wanted
+  player.py           a recording played back as it will be exported
   theme.py            design tokens
   widgets.py          the Canvas widget library
   shell.py            frameless window, title bar, nav rail, language switch

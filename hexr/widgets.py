@@ -982,6 +982,28 @@ class Section(tk.Frame):
             self.body.pack_forget()
 
 
+class Scrubber(Slider):
+    """Where a video is: what has played is lit, and a click or a drag moves it. `dragging`
+    says the hand is on it, so the video's own progress does not fight the drag."""
+
+    def __init__(self, parent, command=None, bg=None):
+        super().__init__(parent, value=0.0, lo=0.0, hi=1.0, command=command, height=16, bg=bg)
+        self.dragging = False
+        self.bind("<ButtonPress-1>", lambda e: setattr(self, "dragging", True), add="+")
+        self.bind("<ButtonRelease-1>", lambda e: setattr(self, "dragging", False), add="+")
+
+    def _paint(self):
+        self.delete("all")
+        w = self.winfo_width()
+        if w <= 1:
+            return
+        cy, r = self.h / 2, 6
+        x = r + self._frac() * (w - 2 * r)
+        self.create_rectangle(r, cy - 2, w - r, cy + 2, width=0, fill=T.BORDER)
+        self.create_rectangle(r, cy - 2, x, cy + 2, width=0, fill=T.ACCENT)
+        self.create_oval(x - r, cy - r, x + r, cy + r, fill=T.TEXT, width=0)
+
+
 class Progress(tk.Canvas):
     """A determinate bar — the countdown and capture phases of teaching."""
 
@@ -1117,6 +1139,18 @@ def icon_fullscreen(c, cx, cy, fg):
             x, y = cx + sx * s, cy + sy * s
             c.create_line(x - sx * k, y, x, y, x, y - sy * k, fill=fg, width=1.6,
                           capstyle="round", joinstyle="round")
+
+
+def icon_play(c, cx, cy, fg):
+    """▶ — play."""
+    c.create_polygon(cx - 4, cy - 6, cx - 4, cy + 6, cx + 6, cy, fill=fg, outline=fg,
+                     width=1, joinstyle="round")
+
+
+def icon_pause(c, cx, cy, fg):
+    """❚❚ — pause."""
+    for x in (cx - 4, cx + 2):
+        c.create_rectangle(x, cy - 6, x + 2.6, cy + 6, fill=fg, width=0)
 
 
 def icon_info(c, cx, cy, fg, r=7):

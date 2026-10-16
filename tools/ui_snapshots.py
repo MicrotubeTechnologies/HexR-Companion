@@ -260,13 +260,16 @@ def main():
     at(t, lambda: detail()._open_recording()); t += 2.5
     at(t, lambda: shot("recordings-landscape")); t += 0.2
     recs = lambda: app.screens["recordings"]  # noqa: E731
+    at(t, lambda: recs()._play_pause()); t += 1.5
+    at(t, lambda: shot("recordings-playing")); t += 0.2
+    at(t, lambda: recs()._play_pause()); t += 0.3
     at(t, lambda: (recs().shape.set("portrait"), recs()._pick_shape("portrait"))); t += 2.0
     at(t, lambda: shot("recordings-portrait")); t += 0.2
     at(t, lambda: recs()._export_clicked()); t += 1.0
     at(t, lambda: shot("recordings-exporting")); t += 8.0
     at(t, lambda: shot("recordings-exported")); t += 0.2
-    at(t, lambda: (recs().shape.set("square"), recs()._pick_shape("square"))); t += 2.0
-    at(t, lambda: shot("recordings-square")); t += 0.2
+    at(t, lambda: (recs().shape.set("view"), recs()._pick_shape("view"))); t += 2.0
+    at(t, lambda: shot("recordings-view")); t += 0.2
 
     def finish():
         if headset:

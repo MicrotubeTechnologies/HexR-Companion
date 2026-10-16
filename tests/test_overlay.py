@@ -108,7 +108,9 @@ def test_each_shape_is_youtubes_and_fits_where_it_is_put():
     assert V.frame_size(None, V.PORTRAIT) == (1080, 1920)
     assert V.frame_size((1000, 400), V.LANDSCAPE) == (710, 400)        # height-bound, even
     assert V.frame_size((300, 2000), V.PORTRAIT) == (300, 532)
-    assert V.frame_size((900, 500), V.SQUARE) == (500, 500)
+    assert V.frame_size((900, 500), V.VIEW) == (500, 500)
+    assert V.frame_size(None, V.VIEW, 16 / 9) == (1920, 1080)
+    assert V.frame_size(None, V.VIEW) == (1080, 1080)
 
 
 @pytest.mark.parametrize("layout", [V.LANDSCAPE, V.PORTRAIT])
@@ -125,7 +127,20 @@ def test_the_view_is_square_and_the_gloves_sit_beside_it_left_first(layout):
     assert V.hit((w, h), layout, 10, 10) == "view"
     assert V.hit((w, h), layout, (b.right[0] + b.right[2]) / 2, (b.right[1] + b.right[3]) / 2) \
         == "right"
-    assert V.boxes((1080, 1080), V.SQUARE).left is None
+    assert V.boxes((1080, 1080), V.VIEW).left is None
+
+
+def test_a_landscape_view_still_makes_youtubes_shapes():
+    wide = 16 / 9
+    b = V.boxes((1920, 1080), V.LANDSCAPE, wide)
+    vw, vh = b.view[2] - b.view[0], b.view[3] - b.view[1]
+    assert vw / vh == pytest.approx(wide, abs=.01)
+    assert 1920 - b.view[2] >= 1920 * V.GLOVES_AT_LEAST                 # room for the gloves
+    assert b.view[1] == pytest.approx(1080 - b.view[3], abs=1)          # centred top to bottom
+    p = V.boxes((1080, 1920), V.PORTRAIT, wide)
+    assert p.view[:3] == (0, 0, 1080) and p.view[3] == pytest.approx(608, abs=1)  # across the top
+    assert p.left[1] >= p.view[3] and p.left[3] <= p.right[1]           # stacked under it
+    assert V.glove_height(p.left) > V.glove_height(V.boxes((1080, 1920), V.PORTRAIT).left)
 
 
 def test_the_panels_light_the_finger_that_is_firing_and_dim_a_glove_not_connected():
@@ -220,7 +235,7 @@ def test_a_recording_is_the_view_as_it_came_with_what_the_gloves_did():
         assert log["events"][0]["finger"] == "index" and log["events"][0]["start"] == 0.2
 
 
-@pytest.mark.parametrize("layout", [V.LANDSCAPE, V.PORTRAIT, V.SQUARE])
+@pytest.mark.parametrize("layout", [V.LANDSCAPE, V.PORTRAIT, V.VIEW])
 def test_a_recording_exports_in_each_shape(layout, monkeypatch):
     av = pytest.importorskip("av")
     from hexr import exporter as X
@@ -236,21 +251,49 @@ def test_a_recording_exports_in_each_shape(layout, monkeypatch):
         assert job.path == os.path.join(folder, "Exports", f"clip ({X.FILE_LABEL[layout]}).mp4")
         with av.open(job.path) as clip:
             stream = clip.streams.video[0]
-            assert (stream.width, stream.height) == V.SIZE[layout]
+            assert (stream.width, stream.height) == V.frame_size(None, layout)
             assert float(clip.duration / 1e6) == pytest.approx(1.5, abs=0.1)
         assert rec.frames == 45
 
 
-def test_a_preview_is_the_export_at_its_busiest_moment():
+def _wait(condition, seconds=5.0):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if condition():
+            return True
+        time.sleep(0.02)
+    return False
+
+
+def test_a_recording_plays_at_its_own_speed_in_the_shape_picked():
     pytest.importorskip("av")
     from hexr import exporter as X
+    from hexr.player import Player
     with tempfile.TemporaryDirectory() as folder:
         _record(folder)
         rec = X.find_recordings(folder)[0]
-        img = X.still(rec, V.PORTRAIT, (300, 600))
-        assert img.size == V.frame_size((300, 600), V.PORTRAIT)
         seconds, thumb = X.probe(rec, 64)
         assert seconds == pytest.approx(1.5, abs=0.1) and max(thumb.size) == 64
+
+        player = Player(rec, V.PORTRAIT, (300, 600))
+        try:
+            shown = []
+            assert _wait(lambda: shown.append(player.latest()) or shown[-1] is not None)
+            assert shown[-1].size == V.frame_size((300, 600), V.PORTRAIT)
+            assert not player.playing and player.position > 0.2     # opens where it is busy
+            player.set_shape(V.LANDSCAPE, (600, 400))
+            assert _wait(lambda: shown.append(player.latest()) or shown[-1] is not None)
+            assert shown[-1].size == V.frame_size((600, 400), V.LANDSCAPE)
+
+            player.seek(0.0)
+            player.play()
+            time.sleep(0.6)
+            assert 0.3 < player.position < 1.0                       # the clock's pace
+            assert _wait(lambda: player.ended, 3.0) and not player.playing
+            player.play()                                            # again, from the top
+            assert _wait(lambda: player.playing and player.position < 0.5, 2.0)
+        finally:
+            player.close()
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 """A recording, made into a video to share: the view beside its gloves, in landscape (16:9) or
-portrait (9:16), YouTube's two shapes, or the view alone, square.
+portrait (9:16), YouTube's two shapes, or the view alone, in its own shape.
 
 A recording is the headset's view as it came and a .gloves.jsonl of what the gloves did
 (hexr/recorder.py). An export draws the two together a frame at a time (hexr/viewer.py), on a
@@ -17,10 +17,10 @@ from dataclasses import dataclass
 
 from . import recorder as REC
 from .haptics import HandState
-from .viewer import LANDSCAPE, PORTRAIT, SIZE, SQUARE, Compositor, GloveBadge, to_frame
+from .viewer import LANDSCAPE, PORTRAIT, VIEW, Compositor, GloveBadge, frame_size, to_frame
 
 # In the exported file's name, so the shapes of one recording sit side by side in the folder.
-FILE_LABEL = {LANDSCAPE: "Landscape", PORTRAIT: "Portrait", SQUARE: "Square"}
+FILE_LABEL = {LANDSCAPE: "Landscape", PORTRAIT: "Portrait", VIEW: "View only"}
 HANDS = ("left", "right")
 
 
@@ -129,26 +129,6 @@ def probe(rec: Recording, thumb: int = 64):
     return 0.0, None
 
 
-def still(rec: Recording, layout: str, fit: tuple[int, int], at: float | None = None):
-    """One frame of the export, to preview it: at `at` seconds, or where the gloves are busiest."""
-    import av
-    track = GloveTrack(REC.gloves_path(rec.path))
-    t = track.liveliest() if at is None else at
-    with av.open(rec.path) as src:
-        vs = src.streams.video[0]
-        if t > 0.5:
-            src.seek(int(max(0.0, t - 1.0) / vs.time_base), stream=vs, backward=True)
-        shown = None
-        for frame in src.decode(vs):
-            shown = frame
-            if frame.time is None or frame.time >= t:
-                break
-        if shown is None:
-            return None
-        states, badges = track.at(float(shown.time or 0.0))
-        return Compositor().draw(shown, states, badges, layout, fit)
-
-
 class Export:
     """One export, on its own thread. `progress` runs 0 to 1; `done`, then `error` or `path`."""
 
@@ -181,7 +161,9 @@ class Export:
                 vs = src.streams.video[0]
                 total = float(vs.duration * vs.time_base) if vs.duration else \
                     (src.duration or 0) / 1e6
-                container, stream = REC.open_video(self.path, SIZE[self.layout])
+                size = frame_size(None, self.layout, vs.codec_context.width /
+                                  max(1, vs.codec_context.height))
+                container, stream = REC.open_video(self.path, size)
                 last_pts = -1
                 for frame in src.decode(vs):
                     if self._stop.is_set():

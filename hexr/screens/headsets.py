@@ -339,6 +339,7 @@ class _Detail(tk.Frame):
                                 anchor="w", justify="left")
 
         self._view_wanted = False
+        self._aspect = 1.0
         self._video_retry_at = 0.0
         self._last_stream = R.StreamState()
         self._unavailable = R.video_available()
@@ -529,7 +530,7 @@ class _Detail(tk.Frame):
             return None
         x = e.x_root - self.screen.winfo_rootx()
         y = e.y_root - self.screen.winfo_rooty()
-        return hit((self._photo.width(), self._photo.height()), LANDSCAPE, x, y)
+        return hit((self._photo.width(), self._photo.height()), LANDSCAPE, x, y, self._aspect)
 
     def _picture_press(self, e):
         where = self._where(e)
@@ -548,7 +549,7 @@ class _Detail(tk.Frame):
             return ""
         x = self.screen.winfo_pointerx() - self.screen.winfo_rootx()
         y = self.screen.winfo_pointery() - self.screen.winfo_rooty()
-        where = hit((self._photo.width(), self._photo.height()), LANDSCAPE, x, y)
+        where = hit((self._photo.width(), self._photo.height()), LANDSCAPE, x, y, self._aspect)
         if where in R.HANDS:
             return self._glove_hint(where)
         if where == "view" and self.video and self.video.state == "playing":
@@ -559,6 +560,9 @@ class _Detail(tk.Frame):
         s = r.status
         st = s.stream if s else R.StreamState()
         self._last_stream = st
+        if st.width > 0 and st.height > 0:
+            # The view's shape, for the picture before its first frame and for a click on it.
+            self._aspect = self.compositor.aspect = self._idle.aspect = st.width / st.height
         live = st.state == "live" and st.port > 0
         allowed = bool(s and s.allow_video) and not self._unavailable
         if live and self._view_wanted and self.video is None:
@@ -624,7 +628,7 @@ class _Detail(tk.Frame):
             if self.say.winfo_manager():
                 self.say.place_forget()
             return
-        x0, y0, x1, y1 = boxes(frame_size(self._fit, LANDSCAPE), LANDSCAPE).view
+        x0, y0, x1, y1 = boxes(frame_size(self._fit, LANDSCAPE), LANDSCAPE, self._aspect).view
         self.say.configure(text=text, wraplength=int((x1 - x0) * .8))
         self.say.place(in_=self.screen, x=(x0 + x1) // 2, y=(y0 + y1) // 2, anchor="center")
         self.say.lift(self.screen)
