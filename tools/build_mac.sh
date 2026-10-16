@@ -56,7 +56,26 @@ if [[ ! -x "$VENV/bin/python" ]]; then
   "$PYTHON" -m venv "$VENV"
 fi
 "$VENV/bin/pip" install -q --upgrade pip
-"$VENV/bin/pip" install -q -r requirements.txt pyinstaller
+"$VENV/bin/pip" install -q -r requirements.txt pyinstaller delocate
+
+# Pillow and PyAV ship an arm64 wheel and an Intel wheel but no universal2
+# one, and PyInstaller refuses single-arch binaries in a universal app. Fuse
+# each pair into one, at the version requirements.txt installed.
+PY_TAG="$("$VENV/bin/python" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
+fuse() {  # fuse <package> <import name>
+  local version wheels plat
+  version="$("$VENV/bin/python" -c "import $2; print($2.__version__)")"
+  wheels="$(mktemp -d)"
+  for plat in macosx_11_0_arm64 macosx_10_13_x86_64; do
+    "$VENV/bin/pip" download -q --only-binary=:all: --no-deps --platform "$plat" \
+      --python-version "$PY_TAG" "$1==$version" -d "$wheels"
+  done
+  "$VENV/bin/delocate-merge" -w "$wheels/fused" "$wheels"/*arm64.whl "$wheels"/*x86_64.whl >/dev/null
+  "$VENV/bin/pip" install -q --force-reinstall --no-deps "$wheels"/fused/*.whl
+  rm -rf "$wheels"
+}
+fuse pillow PIL
+fuse av av
 
 step "Running protocol tests"
 "$VENV/bin/python" tests/test_protocol.py

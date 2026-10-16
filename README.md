@@ -84,7 +84,7 @@ panel per glove beside it that lights up as the glove fires and shows whether
 it is connected (click a panel to connect or disconnect it), recenter the
 wearer, and record. The protocol is `Documentation~/RemoteProtocol.md` in the
 com.microtube.hexr package, the same one the Android app's Headsets tab speaks.
-The view needs PyAV, which only the Windows build ships.
+The view needs PyAV, which both the Windows and the Mac build ship.
 
 **Recordings** — a recording is the view as it came and what the gloves did,
 frame by frame. Export makes it a video in landscape (1920×1080) or portrait

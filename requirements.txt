@@ -1,8 +1,9 @@
 bleak>=0.22.0
 # The Headsets screen's live view: H.264, decoded by PyAV with its own FFmpeg.
-# Windows only. The macOS build is universal (Apple silicon and Intel), and
-# PyAV has no universal wheel, so there the screen controls headsets without
-# showing their view (see hexr/remote.py, video_available).
+# On macOS, 13.1 is the newest that still runs on Apple silicon below macOS 14;
+# PyAV has no universal wheel, so tools/build_mac.sh fuses its arm64 and Intel
+# wheels into one.
 av>=12; sys_platform == "win32"
+av==13.1.0; sys_platform == "darwin"
 # The glove drawn over that view, and recording it. Needed by the screen on every platform.
 pillow>=10.1

@@ -25,9 +25,8 @@ MAC = sys.platform == "darwin"
 
 datas, binaries, hiddenimports = [], [], []
 # PyAV, for the Headsets screen's live view, ships FFmpeg as DLLs beside its
-# extension modules; collect_all brings them along. Windows only, as in
-# requirements.txt.
-for pkg in ("bleak",) + (() if MAC else ("av",)):
+# extension modules; collect_all brings them along.
+for pkg in ("bleak", "av"):
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hiddenimports += h
 

@@ -527,9 +527,8 @@ def _close(sock):
 def video_available() -> str | None:
     """None if this build can show a headset's view, otherwise why it cannot.
 
-    The view is H.264, decoded with PyAV, which brings its own FFmpeg. The Windows build ships
-    it. The macOS build is universal (Apple silicon and Intel in one app), and PyAV has no
-    universal wheel, so that build controls headsets but cannot show their view.
+    The view is H.264, decoded with PyAV, which brings its own FFmpeg. Both the Windows and
+    the macOS build ship it; only a run from source without it installed lacks it.
     """
     try:
         import av  # noqa: F401
