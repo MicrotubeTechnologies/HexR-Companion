@@ -20,6 +20,9 @@ import kotlin.concurrent.thread
  * Every frame is rendered the moment it is decoded rather than at its timestamp: this is a live
  * view of someone's hands, and a smooth picture half a second late is worse than a slightly
  * uneven one that is current.
+ *
+ * [shown] is the frame on screen: its presentation time and when it arrived. The glove panels
+ * beside the view read it to light up with the touch that frame shows (see HapticsTimeline).
  */
 class VideoPlayer(
     private val host: String,
@@ -28,6 +31,16 @@ class VideoPlayer(
     private val wifi: WifiNetwork,
     private val onState: (VideoState) -> Unit,
 ) {
+
+    /** A frame sent to the screen: its presentation time, and when it arrived, in seconds. */
+    class Shown(val ptsUs: Long, val arrivedS: Double)
+
+    @Volatile
+    var shown: Shown? = null
+        private set
+
+    // When each frame still in the decoder arrived, by its presentation time.
+    private val arrivals = HashMap<Long, Double>()
 
     sealed class VideoState {
         data object Connecting : VideoState()
@@ -101,6 +114,10 @@ class VideoPlayer(
 
                 val data = ByteArray(packet.length)
                 input.readFully(data)
+                if (!packet.config) {
+                    arrivals[packet.ptsUs] = nowS()
+                    if (arrivals.size > MAX_ARRIVALS) arrivals.keys.minOrNull()?.let(arrivals::remove)
+                }
 
                 // Wait for room rather than drop: a dropped frame breaks the picture until the
                 // next keyframe, up to a second away. Draining the output meanwhile is what frees it.
@@ -152,7 +169,10 @@ class VideoPlayer(
             when {
                 out >= 0 -> {
                     codec.releaseOutputBuffer(out, info.size > 0)
-                    if (info.size > 0) rendered = true
+                    if (info.size > 0) {
+                        rendered = true
+                        shown = Shown(info.presentationTimeUs, arrivals.remove(info.presentationTimeUs) ?: nowS())
+                    }
                 }
                 out == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> Unit
                 else -> return rendered
@@ -175,13 +195,17 @@ class VideoPlayer(
             .isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_LowLatency)
     }.getOrDefault(false)
 
-    private companion object {
-        const val TAG = "HexRVideo"
-        const val MIME = MediaFormat.MIMETYPE_VIDEO_AVC
-        const val CONNECT_TIMEOUT_MS = 3000
-        const val READ_TIMEOUT_MS = 5000
-        const val INPUT_WAIT_US = 10_000L
-        const val MAX_INPUT_BYTES = 2 * 1024 * 1024
-        const val STOP_WAIT_MS = 500L
+    companion object {
+        /** The clock frames are timed on: monotonic, in seconds, the one the haptics use too. */
+        fun nowS(): Double = android.os.SystemClock.elapsedRealtimeNanos() / 1e9
+
+        private const val MAX_ARRIVALS = 64
+        private const val TAG = "HexRVideo"
+        private const val MIME = MediaFormat.MIMETYPE_VIDEO_AVC
+        private const val CONNECT_TIMEOUT_MS = 3000
+        private const val READ_TIMEOUT_MS = 5000
+        private const val INPUT_WAIT_US = 10_000L
+        private const val MAX_INPUT_BYTES = 2 * 1024 * 1024
+        private const val STOP_WAIT_MS = 500L
     }
 }

@@ -41,6 +41,26 @@ object RemoteProtocol {
     /** Put the wearer back on the scene's starting spot, facing its front (HexR 0.11.0 on). */
     fun recenter() = """{"type":"recenter"}"""
 
+    /**
+     * A headset typed in by hand: "192.168.1.20", or "192.168.1.20:47811" for one on another
+     * port, as a second app on one headset, or a test headset on a computer, would be. Null for
+     * anything that cannot be one.
+     */
+    fun parseAddress(text: String): Pair<String, Int>? {
+        val t = text.trim()
+        if (t.isEmpty()) return null
+        val colon = t.lastIndexOf(':')
+        val (host, port) = if (colon >= 0) {
+            t.substring(0, colon) to (t.substring(colon + 1).toIntOrNull() ?: return null)
+        } else {
+            t to CONTROL_PORT
+        }
+        if (port !in 1..65535 || !HOST.matches(host)) return null
+        return host to port
+    }
+
+    private val HOST = Regex("""[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?""")
+
     /** A JSON string literal: quotes, backslashes and control characters escaped. */
     fun str(s: String): String {
         val out = StringBuilder(s.length + 2).append('"')

@@ -233,8 +233,10 @@ private fun DrawScope.drawGlove(
             if (ch in selected) drawCircle(Color.White, r, p.offset, style = Stroke(2.dp.toPx()))
         }
     }
-    // A finger's name beside it while it fires.
-    if (look.labels != Labels.Off) {
+    // A finger's name beside it while it fires: while one or two do. More, and the names would
+    // crowd the glove, which says enough by lighting up (the desktop's NAMED_AT_MOST).
+    val firing = st.levels.count { it > .08f }
+    if (look.labels == Labels.Always || (look.labels == Labels.Active && firing <= 2)) {
         val fs = max(10.sp.toPx(), gh * .04f)
         points.forEachIndexed { ch, p ->
             val level = st.levels.getOrElse(ch) { 0f }

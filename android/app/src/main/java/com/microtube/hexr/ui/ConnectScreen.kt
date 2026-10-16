@@ -219,7 +219,7 @@ private fun ConnectButton(heard: List<Found>, onPick: (Found) -> Unit) {
 
 /** "Searching", with dots that count up, at a fixed width so the word does not shuffle. */
 @Composable
-private fun searchingWord(): String {
+internal fun searchingWord(word: String = tr("Searching")): String {
     var dots by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -227,7 +227,7 @@ private fun searchingWord(): String {
             dots = (dots + 1) % 4
         }
     }
-    return tr("Searching") + ".".repeat(dots) + " ".repeat(3 - dots)
+    return word + ".".repeat(dots) + " ".repeat(3 - dots)
 }
 
 @Composable

@@ -139,6 +139,12 @@ class MainActivity : ComponentActivity() {
             val scenario = intent.getStringExtra("demo")
             scenario?.let(vm::seedDemo)
             start = Start.named(DemoSeed.startTabFor(scenario))
+            // A headset by address, opened, and watched if asked: tools/fake_headset.py on the
+            // computer the emulator runs on is --es host 10.0.2.2.
+            intent.getStringExtra("host")?.let(headsets::addByAddress)?.let { key ->
+                headsets.select(key)
+                if (intent.getBooleanExtra("watch", false)) headsets.watch(key)
+            }
         }
         setContent {
             HexrTheme {

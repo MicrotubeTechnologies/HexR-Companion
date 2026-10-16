@@ -10,6 +10,10 @@ package com.microtube.hexr
  *     adb shell am start -S -n com.microtube.hexr.tester.debug/com.microtube.hexr.MainActivity \
  *         --es demo driving
  *
+ * The headsets scenario can also open one headset, by address, and watch it:
+ *
+ *     ... --es demo headsets --es host 10.0.2.2 --ez watch true
+ *
  * There is no path to it from the UI and none at all from a release build: see the guard in
  * MainActivity.onCreate. It is data, not a mode: the numbers below are handed to the ordinary
  * [Glove] objects and the ordinary tick turns them into the ordinary snapshots, so what ends up

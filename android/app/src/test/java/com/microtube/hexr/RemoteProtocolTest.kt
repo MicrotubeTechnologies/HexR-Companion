@@ -107,6 +107,18 @@ class RemoteProtocolTest {
         assertNull(RemoteProtocol.parseAnnounce("garbage"))
     }
 
+    @Test
+    fun addressTypedIn_takesAPortOrTheControlPort() {
+        assertEquals("192.168.1.20" to RemoteProtocol.CONTROL_PORT, RemoteProtocol.parseAddress(" 192.168.1.20 "))
+        assertEquals("10.0.2.2" to 47811, RemoteProtocol.parseAddress("10.0.2.2:47811"))
+        assertEquals("quest-3.local" to RemoteProtocol.CONTROL_PORT, RemoteProtocol.parseAddress("quest-3.local"))
+        assertNull(RemoteProtocol.parseAddress(""))
+        assertNull(RemoteProtocol.parseAddress("10.0.2.2:"))
+        assertNull(RemoteProtocol.parseAddress("10.0.2.2:99999"))
+        assertNull(RemoteProtocol.parseAddress("http://10.0.2.2"))
+        assertNull(RemoteProtocol.parseAddress("a b"))
+    }
+
     // -- video framing: the bytes VideoServer.java writes ---------------------
 
     private fun bytes(hex: String) = hex.split(" ").map { it.toInt(16).toByte() }.toByteArray()

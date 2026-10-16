@@ -115,6 +115,8 @@ fun ActionButton(
     style: ActionStyle = ActionStyle.Primary,
     enabled: Boolean = true,
     height: Dp = P.ACTION,
+    /** A disabled button that can still say why it is: tapped, it calls this instead. */
+    onDisabledClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
@@ -131,9 +133,13 @@ fun ActionButton(
             .clip(RoundedCornerShape(T.R_CTRL))
             .background(fill)
             .border(1.dp, border, RoundedCornerShape(T.R_CTRL))
-            .clickable(enabled = enabled, role = Role.Button) {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                onClick()
+            .clickable(enabled = enabled || onDisabledClick != null, role = Role.Button) {
+                if (enabled) {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                } else {
+                    onDisabledClick?.invoke()
+                }
             }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

@@ -9,10 +9,13 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.microtube.hexr.remote.Announce
+import com.microtube.hexr.remote.HapticsTimeline
+import com.microtube.hexr.remote.HapticsUpdate
 import com.microtube.hexr.remote.HeadsetDiscovery
 import com.microtube.hexr.remote.HeadsetLink
 import com.microtube.hexr.remote.HeadsetStatus
 import com.microtube.hexr.remote.RemoteProtocol
+import com.microtube.hexr.remote.VideoPlayer
 import com.microtube.hexr.remote.WifiNetwork
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -29,6 +32,10 @@ data class HeadsetRow(
     val link: HeadsetLink.State,
     val error: String?,
     val manual: Boolean,
+    /** This phone asked to watch: the view shows while the headset shares it. */
+    val watching: Boolean = false,
+    /** When Recenter was last pressed, on SystemClock.elapsedRealtime(); 0 for never. */
+    val recenteredAt: Long = 0,
 )
 
 /**
@@ -42,7 +49,8 @@ data class HeadsetRow(
  *
  * Network threads write into [entries]; the UI reads [rows], a snapshot rebuilt on a tick, so a
  * headset reporting five times a second does not recompose the screen five times a second for
- * each of several headsets.
+ * each of several headsets. What the gloves are doing goes into each headset's
+ * [HapticsTimeline] instead, which the glove panels read as they draw, frame by frame.
  */
 class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.Listener {
 
@@ -58,6 +66,10 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
         @Volatile var error: String? = null
         @Volatile var errorAt: Long = 0
         @Volatile var lastHeard: Long = SystemClock.elapsedRealtime()
+        @Volatile var recenteredAt: Long = 0
+        // Watch was pressed before the headset could be told: ask with its next status.
+        @Volatile var askToShare = false
+        val timeline = HapticsTimeline()
     }
 
     private val wifi = WifiNetwork(app)
@@ -72,13 +84,15 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
     var selected by mutableStateOf<String?>(null)
         private set
 
-    /** The headset whose view fills the screen, by key, or null. */
-    var viewing by mutableStateOf<String?>(null)
+    /** The headsets this phone wants to watch, by key. */
+    private var watching by mutableStateOf<Set<String>>(emptySet())
+
+    /** Listening and connected: the tab is on screen and the app in front. No view plays otherwise. */
+    var online by mutableStateOf(false)
         private set
 
     private var visible = false
     private var foreground = true
-    private var active = false
 
     init {
         viewModelScope.launch {
@@ -91,7 +105,7 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
 
     // -- when to listen ----------------------------------------------------------
 
-    /** The tab is on screen. Nothing is opened until it is: the tester's other tabs need no network. */
+    /** The tab is on screen. Nothing is opened until it is: the app's other tab needs no network. */
     fun setVisible(on: Boolean) {
         visible = on
         update()
@@ -105,8 +119,8 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
 
     private fun update() {
         val want = visible && foreground
-        if (want == active) return
-        active = want
+        if (want == online) return
+        online = want
         if (want) {
             wifi.start()
             discovery.start()
@@ -125,7 +139,7 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
         if (existing == null) {
             val entry = Entry(a.id, host, newLink(a.id, host, a.control), manual = false)
             entry.announce = a
-            if (entries.putIfAbsent(a.id, entry) == null && active) entry.link.start()
+            if (entries.putIfAbsent(a.id, entry) == null && online) entry.link.start()
             return
         }
 
@@ -139,20 +153,26 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
         }
     }
 
-    /** For venue Wi-Fi that hides devices from each other: connect by typing the headset's IP. */
-    fun addByAddress(address: String) {
-        val host = address.trim()
-        if (host.isEmpty()) return
-        val key = "ip:$host"
-        if (entries.containsKey(key)) return
-        val entry = Entry(key, host, newLink(key, host, RemoteProtocol.CONTROL_PORT), manual = true)
-        entries[key] = entry
-        if (active) entry.link.start()
-        tick()
+    /**
+     * For venue Wi-Fi that hides devices from each other: connect by typing the headset's
+     * address, with its port after a colon if it is not the usual one. The headset's key, to
+     * open it, or null if that is not an address.
+     */
+    fun addByAddress(address: String): String? {
+        val (host, port) = RemoteProtocol.parseAddress(address) ?: return null
+        val key = if (port == RemoteProtocol.CONTROL_PORT) "ip:$host" else "ip:$host:$port"
+        if (!entries.containsKey(key)) {
+            val entry = Entry(key, host, newLink(key, host, port), manual = true)
+            entries[key] = entry
+            if (online) entry.link.start()
+            tick()
+        }
+        return key
     }
 
     fun forget(key: String) {
         entries.remove(key)?.link?.stop()
+        watching = watching - key
         if (selected == key) selected = null
         tick()
     }
@@ -168,6 +188,9 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
         tick()
     }
 
+    /** What this headset's gloves are doing, for the panels beside its view. */
+    fun timeline(key: String): HapticsTimeline? = entries[key]?.timeline
+
     // -- requests -----------------------------------------------------------------
 
     fun connectGlove(key: String, hand: String) = send(key, RemoteProtocol.glove("connect", hand))
@@ -176,31 +199,44 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
 
     fun release(key: String) = send(key, RemoteProtocol.release())
 
-    fun loadScene(key: String, index: Int) = send(key, RemoteProtocol.scene(index))
-
-    fun runCommand(key: String, id: String) = send(key, RemoteProtocol.command(id))
-
-    fun startView(key: String) = send(key, RemoteProtocol.stream("start"))
-
-    /** Watch: the view takes the screen, and the wearer is asked to share if nobody has yet. */
-    fun openViewer(key: String) {
-        val stream = entries[key]?.status?.stream
-        if (stream == null || (!stream.live && stream.state != "requesting")) startView(key)
-        viewing = key
+    /** Put the wearer back on the scene's starting spot. The button says it was done, for a moment. */
+    fun recenter(key: String) {
+        entries[key]?.recenteredAt = SystemClock.elapsedRealtime()
+        send(key, RemoteProtocol.recenter())
+        tick()
     }
 
     /**
-     * Ending the share closes every viewer's connection, so it ends only if no other phone or
-     * computer is watching; otherwise this phone just leaves.
+     * Watch: ask the wearer to share, unless the headset already is (for another phone, or a
+     * computer), in which case this phone just joins.
      */
-    fun closeViewer() {
-        val key = viewing ?: return
-        viewing = null
-        val stream = entries[key]?.status?.stream ?: return
-        if ((stream.live || stream.state == "requesting") && stream.viewers <= 1) stopView(key)
+    fun watch(key: String) {
+        watching = watching + key
+        val entry = entries[key] ?: return
+        val stream = entry.status?.stream
+        when {
+            entry.state != HeadsetLink.State.Connected || stream == null -> entry.askToShare = true
+            !stream.live && stream.state != "requesting" -> send(key, RemoteProtocol.stream("start"))
+        }
+        tick()
     }
 
-    fun stopView(key: String) = send(key, RemoteProtocol.stream("stop"))
+    /**
+     * Stop watching. Ending the share closes every viewer's connection, so it ends only if no
+     * other phone or computer is watching; otherwise this phone just leaves. [joined] is whether
+     * this phone's own view was connected, and so one of the viewers the headset counts.
+     */
+    fun stopWatching(key: String, joined: Boolean) {
+        if (key !in watching) return
+        watching = watching - key
+        entries[key]?.askToShare = false
+        val stream = entries[key]?.status?.stream
+        if (stream != null && (stream.live || stream.state == "requesting")) {
+            val others = stream.viewers - if (joined) 1 else 0
+            if (others <= 0) send(key, RemoteProtocol.stream("stop"))
+        }
+        tick()
+    }
 
     private fun send(key: String, line: String) {
         val entry = entries[key] ?: return
@@ -211,14 +247,26 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
     // -- from the links' threads ------------------------------------------------------
 
     override fun onLinkState(key: String, state: HeadsetLink.State) {
-        entries[key]?.state = state
+        val e = entries[key] ?: return
+        // A new connection may be to a headset that restarted, and its clock with it.
+        if (state == HeadsetLink.State.Connected && e.state != HeadsetLink.State.Connected) e.timeline.resetClock()
+        e.state = state
     }
 
     override fun onStatus(key: String, status: HeadsetStatus) {
         entries[key]?.apply {
             this.status = status
             lastHeard = SystemClock.elapsedRealtime()
+            timeline.onStatus(status, VideoPlayer.nowS())
+            if (askToShare) {
+                askToShare = false
+                if (!status.stream.live && status.stream.state != "requesting") link.send(RemoteProtocol.stream("start"))
+            }
         }
+    }
+
+    override fun onHaptics(key: String, update: HapticsUpdate) {
+        entries[key]?.timeline?.onHaptics(update)
     }
 
     override fun onError(key: String, request: String, message: String) {
@@ -239,6 +287,10 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
             .filter { !it.manual && it.state != HeadsetLink.State.Connected && now - it.lastHeard > FORGET_AFTER_MS }
             .forEach { forget(it.key) }
 
+        // The wearer said no: that is an answer, not something to keep waiting on.
+        val declined = watching.filter { entries[it]?.status?.stream?.state == "denied" }
+        if (declined.isNotEmpty()) watching = watching - declined.toSet()
+
         rows = entries.values
             .map { e ->
                 val nickname = prefs.getString("nick:${e.key}", null).orEmpty()
@@ -253,19 +305,20 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
                     link = e.state,
                     error = e.error?.takeIf { now - e.errorAt < ERROR_SHOWN_MS },
                     manual = e.manual,
+                    watching = e.key in watching,
+                    recenteredAt = e.recenteredAt,
                 )
             }
             .sortedBy { it.title.lowercase() }
 
         if (selected != null && entries[selected] == null) selected = null
-        if (viewing != null && entries[viewing] == null) viewing = null
     }
 
     private fun newLink(key: String, host: String, port: Int) = HeadsetLink(key, host, port, wifi, this)
 
     /**
      * Headsets of one model share a name ("Quest 3"), so a list of them needs something to tell
-     * them apart before anyone has named them: the end of the headset's id, or its IP.
+     * them apart before anyone has named them: the end of the headset's id, or its address.
      */
     private fun shortId(key: String) = if (key.startsWith("ip:")) key.removePrefix("ip:") else key.takeLast(4).uppercase()
 
