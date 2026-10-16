@@ -1,8 +1,8 @@
 # HEXR Companion
 
 A Windows and macOS app for testing HEXR haptic gloves. Connect a left and/or right
-glove, tap a finger and hold to feel it, see on the glove what the hardware
-reports back, and run a pass/fail sweep on all six channels.
+glove, pick fingers and trigger them, see each finger's air pressure against what
+it is set to, and run a pass/fail sweep on all six channels.
 
 **This is a test and diagnostic tool, not a runtime.** To *build* with HEXR you
 integrate the [`com.microtube.hexr`](https://github.com/MicrotubeTechnologies/com.microtube.hexr)
@@ -63,11 +63,12 @@ them.
 searches on its own: power on the arm module and press **Connect** when it is
 found. Gloves advertise as `HaptGloveAR Left` / `HaptGloveAR Right`; hand is
 read from that name. Both connect independently and can be driven at once. Once
-one connects, Test is the controls: tap the fingers to drive on the glove
-picture, pick pressure or vibration and the intensity, and press and hold
-**Hold to feel** (or Space); **Keep on** turns it into a switch. The same glove
-glows with the pressure the glove measures, so a weak channel is visible rather
-than something you have to feel for. **Quick test**, in Test's title row, drives
+one connects, Test is the controls: pick the fingers to drive (tick them in the
+list, or tap them on the glove picture), pick pressure or vibration and the
+intensity, and press **Trigger**; **Release all** vents them. Each finger's row
+shows the air pressure the glove measures against where it is set to go, and
+grows when the window is maximised, so a weak channel is visible rather than
+something you have to feel for. **Quick test**, in Test's title row, drives
 all six channels to full for two seconds and colours the glove by verdict (take
 the glove off first). The gloves button at the top right of every screen shows
 which gloves are connected and the battery, and opens a panel to connect the
@@ -90,8 +91,8 @@ frame by frame. Export makes it a video in landscape (1920×1080) or portrait
 (1080×1920), the view with its gloves beside it, or the view alone. The Recordings
 screen plays a recording in the shape picked before it is exported.
 
-**Escape is the panic key**, and **Release all** sits under Hold to feel on the
-Test screen. Hold to feel lets go when the window loses focus or Test is left.
+**Escape is the panic key**, and **Release all** sits beside Trigger on the Test
+screen; a triggered finger stays on until one of them.
 All channels are also vented on disconnect, on exit, and when the Quick test
 panel is closed mid-run.
 

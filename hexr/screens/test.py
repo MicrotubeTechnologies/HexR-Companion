@@ -1,14 +1,12 @@
-"""Test the glove by hand: tap its fingertips, then press and hold to feel them.
+"""Test the glove by hand: tap its fingertips, Trigger them, Release all.
 
-The glove is the screen. Tap a touch point to pick it; press and hold the pad and the
-glove presses back, for as long as the pad is held, the way a hand meets an object.
-The same glove lights up with what the glove measures. Under it, each finger's air
-pressure, a row each: what the glove measures, as a bar and in kPa, and a white mark
-where that finger is set to go, so what was asked for and what the hardware did sit
-side by side. Details adds the battery and how the firmware drives a vibration.
-
-"Keep on" turns the pad into a switch for longer runs. Escape, Release all, leaving
-the screen and the window losing focus all let go.
+The glove is the screen. Tap a touch point to pick it; Trigger fires the fingers picked,
+as set, and they stay on until Release all (or Escape, or the glove disconnecting, or
+the app closing). Trigger again sends what is set now. The same glove lights up with
+what the glove measures. Under it, each finger's air pressure, a row each: what the
+glove measures, as a bar and in kPa, and a white mark where that finger is set to go,
+so what was asked for and what the hardware did sit side by side. The rows grow with
+the window. Details adds the battery and how the firmware drives a vibration.
 """
 
 from __future__ import annotations
@@ -21,11 +19,13 @@ from .. import theme as T
 from ..gloveview import GloveView, pad_state
 from ..i18n import N_, tr
 from ..state import HANDS
-from ..widgets import (Button, Disclosure, HoldButton, PressureTable, Segmented, Slider,
-                       StatusChip, TextLink, Toggle)
+from ..widgets import (Button, Disclosure, PressureTable, Segmented, Slider, StatusChip,
+                       TextLink)
 from .base import Screen
 
 RIGHT_W = 340
+BASE_VIEW_H = 640       # the screen's height at the window's own size: the rows' scale 1
+MAX_SCALE = 1.8         # how much bigger the rows grow, full screen
 
 
 class TestScreen(Screen):
@@ -39,7 +39,7 @@ class TestScreen(Screen):
         self.settings = app.state.test
         self._pressed_at = 0.0
         self._released_at: float | None = None
-        self.keep = False
+        self.on = False                 # fingers triggered and not released since
 
         Button(self.head_actions, tr("Quick test"), command=lambda: app.open_panel("quicktest"),
                height=32, fill=T.RAISED, fg=T.TEXT, border=T.BORDER, hover_fill=T.INSET,
@@ -56,7 +56,6 @@ class TestScreen(Screen):
         self._build_glove(left)
         self._build_controls(right)
         self.show_details(self.details)
-        self.winfo_toplevel().bind("<FocusOut>", self._focus_out, add="+")
 
     # -- the glove ------------------------------------------------------------------------------
 
@@ -79,17 +78,16 @@ class TestScreen(Screen):
         TextLink(links, tr("All"), command=lambda: self._select(set(range(6)))).pack(side="left")
         tk.Label(links, text="·", bg=T.SURFACE, fg=T.TEXT_OFF).pack(side="left", padx=4)
         TextLink(links, tr("None"), command=lambda: self._select(set())).pack(side="left")
-        self.hint = tk.Label(under, text=tr("Tap a finger"), bg=T.SURFACE, fg=T.TEXT_FAINT,
+        self.hint = tk.Label(under, text=tr("Pick a finger"), bg=T.SURFACE, fg=T.TEXT_FAINT,
                              font=T.font(13))
         # Each finger's air pressure, and where it is set to go.
         self.table = PressureTable(parent, [tr(P.FINGER_LABELS[P.Finger(ch)]) for ch in range(6)],
-                                   tr("Air supply"),
-                                   on_toggle=lambda _hand, ch: self._toggle_channel(ch))
+                                   tr("Air supply"), on_toggle=self._row_clicked)
         self.table.pack(fill="x", pady=(14, 0))
         self.info = tk.Label(parent, text="", bg=T.SURFACE, fg=T.TEXT_FAINT, font=T.mono(11),
                              anchor="w", justify="left")
 
-    # -- how it feels, and the pad ------------------------------------------------------------
+    # -- how it feels, and the two buttons ---------------------------------------------------
 
     def _build_controls(self, parent):
         s = self.settings
@@ -116,21 +114,17 @@ class TestScreen(Screen):
 
         tk.Frame(parent, bg=T.SURFACE).pack(fill="both", expand=True)
 
-        self.pad = HoldButton(parent, tr("Hold to feel"), on_press=self._press,
-                              on_release=self._release, height=72)
-        self.pad.pack(fill="x")
+        # Trigger fires the fingers picked and leaves them on; Release all vents everything.
         row = tk.Frame(parent, bg=T.SURFACE)
-        row.pack(fill="x", pady=(12, 0))
-        self.keep_switch = Toggle(row, command=self._toggle_keep)
-        self.keep_switch.set(False)
-        self.keep_switch.pack(side="left")
-        keep = tk.Label(row, text=tr("Keep on"), bg=T.SURFACE, fg=T.TEXT_2, font=T.font(12.5),
-                        cursor="hand2")
-        keep.pack(side="left", padx=(8, 0))
-        keep.bind("<Button-1>", lambda e: self._toggle_keep())
-        Button(row, tr("Release all"), command=self.app.all_off, height=32, fill=T.INSET,
-               fg=T.TEXT_2, border=T.BORDER, hover_fill=T.INSET, hover_fg=T.DANGER,
-               hover_border=T.DANGER, padx=14, font=T.font(12.5, 600)).pack(side="right")
+        row.pack(fill="x")
+        row.grid_columnconfigure((0, 1), weight=1, uniform="buttons")
+        self.trigger_btn = Button(row, tr("Trigger"), command=self._trigger, height=64,
+                                  font=T.font(15, 600))
+        self.trigger_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.release_btn = Button(row, tr("Release all"), command=self.app.all_off, height=64,
+                                  font=T.font(15, 600))
+        self.release_btn.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        self._paint_release()
 
     def _slider(self, parent, label, lo, hi, value, command, pady):
         wrap = tk.Frame(parent, bg=T.SURFACE)
@@ -161,12 +155,22 @@ class TestScreen(Screen):
             self.settings.channels.add(chan)
         self.refresh()
 
+    def _row_clicked(self, hand, chan):
+        """A finger's row: picks or drops it, and picks that glove if it was not."""
+        if hand not in self.settings.hands:
+            self.settings.hands.add(hand)
+            self.settings.channels.add(chan)
+            self.refresh()
+            return
+        self._toggle_channel(chan)
+
     def _select(self, channels: set):
         self.settings.channels = set(channels)
         self.refresh()
 
     def _pick_mode(self, mode):
-        self.pad.release()
+        if self.on and mode != self.settings.mode:
+            self._release()          # what is on was set for the other mode: let it go
         self.settings.mode = mode
         self.refresh()
 
@@ -186,11 +190,6 @@ class TestScreen(Screen):
         self.settings.peak_ratio = v
         self.refresh()
 
-    def _toggle_keep(self):
-        self.keep = not self.keep
-        self.keep_switch.set(self.keep)
-        self.pad.set(latched=self.keep)
-
     def _frames(self, on: bool) -> bytes:
         s = self.settings
         fingers = s.active_fingers()
@@ -200,20 +199,37 @@ class TestScreen(Screen):
                 for f in fingers)
         return P.batch(P.pressure(f, on, s.intensity, s.speed) for f in fingers)
 
-    def _press(self):
+    def _trigger(self):
+        s = self.settings
+        if not (s.channels and [h for h in self._connected() if h in s.hands]):
+            return
         self._pressed_at = time.monotonic()
         self._released_at = None
-        self.app.send(self.settings.hands, self._frames(True))
+        self.on = True
+        self.app.send(s.hands, self._frames(True))
+        self._paint_release()
 
     def _release(self):
         self._released_at = time.monotonic()
+        self.on = False
         self.app.send(self.settings.hands, self._frames(False))
+        self._paint_release()
 
     def reset_pad(self):
-        """Everything was vented some other way (Escape, Release all): show the pad let go."""
-        if self.pad.held:
+        """Everything was vented (Release all, Escape): show it let go."""
+        if self.on:
             self._released_at = time.monotonic()
-        self.pad.release(send=False)
+        self.on = False
+        self._paint_release()
+
+    def _paint_release(self):
+        """Release all in red while anything is on, so it is the button the eye finds."""
+        if self.on:
+            self.release_btn.set(fill=T.DANGER, fg=T.TEXT, border=T.DANGER, hover_fill=T.DANGER,
+                                 hover_fg=T.TEXT, hover_border=T.TEXT)
+        else:
+            self.release_btn.set(fill=T.INSET, fg=T.TEXT_2, border=T.BORDER, hover_fill=T.INSET,
+                                 hover_fg=T.DANGER, hover_border=T.DANGER)
 
     # -- showing it -----------------------------------------------------------------------------
 
@@ -249,7 +265,7 @@ class TestScreen(Screen):
             self.hint.pack_forget()
 
         sending = [h for h in connected if h in s.hands]
-        self.pad.set(disabled=not (s.channels and sending))
+        self.trigger_btn.set(disabled=not (s.channels and sending))
 
         if self.details and vibrating:
             hz = f"{P.PWM_VIBRATION_HZ:.0f}"
@@ -280,15 +296,18 @@ class TestScreen(Screen):
         self.refresh()
 
     def on_tick(self):
-        """The glove, 20 times a second: what it measures, or what the pad is doing."""
+        """The glove, 20 times a second: what it measures, or what was triggered."""
         s = self.settings
+        view = self._area._canvas.winfo_height()
+        if view > 1:
+            self.table.set_scale(max(1.0, min(MAX_SCALE, view / BASE_VIEW_H)))
         connected = self._connected()
         hands = [h.lower() for h in connected]
         self.glove.set_hands(hands)
         self.glove.set_selected(s.channels)
         self.glove.set_dim({h.lower(): 1.0 if h in s.hands else 0.45 for h in connected})
         now = time.monotonic()
-        held = self.pad.held
+        held = self.on
         # Where a picked finger is set to go: a pressure, or a pulsed one; a buzz drives the
         # motor rather than a pressure, so it has no mark.
         target = P.intensity_to_kpa(s.intensity) \
@@ -320,33 +339,4 @@ class TestScreen(Screen):
     # -- coming and going -------------------------------------------------------------------------
 
     def on_show(self):
-        root = self.winfo_toplevel()
-        root.bind("<KeyPress-space>", self._space_down)
-        root.bind("<KeyRelease-space>", self._space_up)
         self.refresh()
-
-    def on_hide(self):
-        root = self.winfo_toplevel()
-        root.unbind("<KeyPress-space>")
-        root.unbind("<KeyRelease-space>")
-        self.pad.release()
-
-    def _typing(self) -> bool:
-        return isinstance(self.focus_get(), (tk.Entry, tk.Text))
-
-    def _space_down(self, _e):
-        if not self._typing():
-            self.pad.key_down()
-
-    def _space_up(self, _e):
-        if not self._typing():
-            self.pad.key_up()
-
-    def _focus_out(self, _e):
-        # The window losing focus mid-hold would leave the glove pressing.
-        if self.winfo_exists():
-            self.after(50, self._release_if_away)
-
-    def _release_if_away(self):
-        if self.winfo_exists() and self.focus_get() is None:
-            self.pad.release()

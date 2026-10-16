@@ -213,10 +213,7 @@ ZH: dict[str, str] = {
     "Could not connect": "无法连接",
     "Bluetooth unavailable": "蓝牙不可用",
     "Try again": "重试",
-    "Tap a finger": "点按手指",
     "All": "全选",
-    "Hold to feel": "按住感受",
-    "Keep on": "保持开启",
     "Fine-tune": "微调",
     "Pulse": "脉冲",
     "Buzz": "嗡振",
@@ -274,4 +271,6 @@ ZH: dict[str, str] = {
     "No readings": "无读数",
     "Set to": "设定",
     "Now": "当前",
+    "Trigger": "触发",
+    "Pick a finger": "选择手指",
 }

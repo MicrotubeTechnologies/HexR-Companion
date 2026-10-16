@@ -1271,121 +1271,6 @@ class DetailsToggle(tk.Canvas):
                          font=self._font)
 
 
-class HoldButton(tk.Canvas):
-    """The pad: press and hold to drive the glove, let go to release it, the way a
-    hand meets an object. Space does the same while the screen has it.
-
-    `latched` turns it into a switch for longer runs: a click turns it on and the
-    next turns it off. `release()` lets go from outside (leaving the screen,
-    Escape, the window losing focus), so nothing stays pressed by accident.
-    """
-
-    def __init__(self, parent, text, on_press, on_release, height=68, bg=None):
-        bg = bg or parent.cget("bg")
-        super().__init__(parent, width=1, height=height, bg=bg,
-                         highlightthickness=0, bd=0, cursor="hand2")
-        self.text, self.on_press, self.on_release, self.h = text, on_press, on_release, height
-        self.held = self.latched = self.disabled = False
-        self.sub = ""
-        self._hot = False
-        self._key_release = None
-        self.bind("<ButtonPress-1>", lambda e: self.down())
-        self.bind("<ButtonRelease-1>", lambda e: self.up())
-        self.bind("<Enter>", lambda e: self._hover(True))
-        self.bind("<Leave>", lambda e: self._hover(False))
-        self.bind("<Configure>", lambda e: self.render())
-
-    def _hover(self, hot):
-        self._hot = hot
-        self.render()
-
-    def down(self):
-        if self.disabled:
-            return
-        if self.latched:
-            self._release() if self.held else self._press()
-        elif not self.held:
-            self._press()
-
-    def up(self):
-        if not self.latched and self.held:
-            self._release()
-
-    # Windows repeats a held key's press; X11 repeats press and release. Ignoring a
-    # press while held, and waiting a moment before acting on a release, covers both.
-    def key_down(self):
-        if self._key_release:
-            self.after_cancel(self._key_release)
-            self._key_release = None
-            return
-        if not self.held or self.latched:
-            self.down()
-
-    def key_up(self):
-        if self.latched:
-            return
-        if self._key_release:
-            self.after_cancel(self._key_release)
-        self._key_release = self.after(40, self._key_up_now)
-
-    def _key_up_now(self):
-        self._key_release = None
-        self.up()
-
-    def release(self, send: bool = True):
-        """Let go now. `send=False` when the glove has been vented some other way."""
-        if self.held:
-            self.held = False
-            self.render()
-            if send:
-                self.on_release()
-
-    def _press(self):
-        self.held = True
-        self.render()
-        self.on_press()
-
-    def _release(self):
-        self.held = False
-        self.render()
-        self.on_release()
-
-    def set(self, text=None, sub=None, disabled=None, latched=None):
-        if text is not None:
-            self.text = text
-        if sub is not None:
-            self.sub = sub
-        if disabled is not None:
-            self.disabled = disabled
-            self.configure(cursor="arrow" if disabled else "hand2")
-            if disabled:
-                self.release()
-        if latched is not None and latched != self.latched:
-            self.latched = latched
-            if not latched:
-                self.release()
-        self.render()
-
-    def render(self):
-        self.delete("all")
-        w = self.winfo_width()
-        if w <= 1:
-            return
-        if self.disabled:
-            fill, edge, fg = T.INSET, T.BORDER, T.TEXT_OFF
-        elif self.held:
-            fill, edge, fg = T.ACCENT, T.ACCENT, T.CANVAS
-        else:
-            fill = T.ACCENT_EDGE if self._hot else T.ACCENT_FILL
-            edge, fg = T.ACCENT, T.ACCENT
-        draw_round(self, 0, 0, w - 1, self.h - 1, 12, fill, edge)
-        if self.sub:
-            self.create_text(w / 2, self.h / 2 - 9, text=self.text, fill=fg, font=T.font(17, 600))
-            self.create_text(w / 2, self.h / 2 + 13, text=self.sub, fill=fg, font=T.font(11.5))
-        else:
-            self.create_text(w / 2, self.h / 2, text=self.text, fill=fg, font=T.font(17, 600))
-
-
 class StatusChip(tk.Canvas):
     """A dot and a word: "● Left glove", "● Live". Clickable when it has a command."""
 
@@ -1523,31 +1408,48 @@ class SignalBars(tk.Canvas):
 class PressureTable(tk.Canvas):
     """Each finger's air pressure, a row each, for one or two hands side by side: what the glove
     measures (the bar and the number, in kPa) and what the finger is set to (a white mark).
-    Fingers picked are bright and the rest faint; the air supply feeding them all is the last
-    row. A click on a finger's row picks or drops it, as a tap on the glove does.
+    Fingers picked are bright, with their box ticked, and the rest faint; the air supply
+    feeding them all is the last row. A click on a finger's row picks or drops it, as a tap on
+    the glove does: the box and the row lit under the mouse say so.
 
     `set(groups)` takes a dict per hand: hand, title, live, kpa (six, or None), source (or
     None), picked (a set of channels), target (kPa, or None) and note. It redraws only when
     something it shows has changed."""
 
-    ROW = 21
-    HEAD = 22
     SCALE = 55.0          # kPa at a bar's end: the glove is driven 15-50
     GAP = 28
 
     def __init__(self, parent, names, supply, on_toggle=None, bg=None):
         bg = bg or parent.cget("bg")
-        super().__init__(parent, width=1, height=self.HEAD + self.ROW * 7 + 8, bg=bg,
-                         highlightthickness=0, bd=0)
+        super().__init__(parent, width=1, height=1, bg=bg, highlightthickness=0, bd=0)
         self.names, self.supply, self.on_toggle = list(names), supply, on_toggle
         self._groups: list[dict] = []
         self._key = None
-        self._font, self._bold = T.font(12), T.font(12, 600)
-        self._mono = T.mono(11)
-        self._name_w = max(self._bold.measure(n) for n in self.names + [supply]) + 12
+        self._hover = None
+        self.scale = 0.0
+        self.set_scale(1.0)
         self.bind("<Configure>", lambda e: self._draw())
         self.bind("<Button-1>", self._click)
         self.bind("<Motion>", self._motion)
+        self.bind("<Leave>", lambda e: self._set_hover(None))
+
+    def set_scale(self, scale: float):
+        """Bigger rows, words and bars: the window full screen has room for them."""
+        scale = round(scale * 10) / 10
+        if scale == self.scale:
+            return
+        self.scale = scale
+        self.ROW, self.HEAD = round(21 * scale), round(22 * scale)
+        self._bar = max(6, round(8 * scale))
+        self._font, self._bold = T.font(12 * scale), T.font(12 * scale, 600)
+        self._small, self._title = T.font(11 * scale), T.font(12 * scale, 600)
+        self._mono = T.mono(11 * scale)
+        self._box = round(15 * scale)
+        self._name_x = self._box + round(10 * scale)
+        self._name_w = self._name_x + max(self._bold.measure(n)
+                                          for n in self.names + [self.supply]) + 12
+        self.configure(height=self.HEAD + self.ROW * 7 + round(8 * scale))
+        self._draw()
 
     def set(self, groups: list[dict]):
         key = tuple((g["hand"], g["live"], tuple(round(k * 2) for k in (g["kpa"] or ())),
@@ -1563,12 +1465,12 @@ class PressureTable(tk.Canvas):
     def _columns(self):
         n = max(1, len(self._groups))
         w = self.winfo_width()
-        gw = min(440, (w - self.GAP * (n - 1)) / n)
+        gw = min(440 * self.scale, (w - self.GAP * (n - 1)) / n)
         return [(i * (gw + self.GAP), gw) for i in range(n)]
 
     def _row_y(self, row: int) -> float:
         """The middle of a row: six fingers, then the air supply a little apart."""
-        return self.HEAD + self.ROW * row + self.ROW / 2 + (6 if row == 6 else 0)
+        return self.HEAD + self.ROW * row + self.ROW / 2 + (6 * self.scale if row == 6 else 0)
 
     def _at(self, x, y):
         for (x0, gw), g in zip(self._columns(), self._groups):
@@ -1588,7 +1490,7 @@ class PressureTable(tk.Canvas):
 
     def _group(self, x0, gw, g):
         self.create_text(x0, self.HEAD / 2 - 2, text=g["title"], anchor="w", fill=T.TEXT_2,
-                         font=T.font(12, 600))
+                         font=self._title)
         self._legend(x0 + gw, self.HEAD / 2 - 2, g["note"])
         value_w = self._mono.measure("00 kPa") + 6
         bx0, bx1 = x0 + self._name_w, x0 + gw - value_w - 8
@@ -1601,37 +1503,55 @@ class PressureTable(tk.Canvas):
             if supply:
                 self.create_line(x0, y - self.ROW / 2 - 3, x0 + gw, y - self.ROW / 2 - 3,
                                  fill=T.BORDER_SOFT)
+            elif self._hover == (g["hand"], row):
+                draw_round(self, x0 - 6, y - self.ROW / 2 + 1, x0 + gw + 6, y + self.ROW / 2 - 1,
+                           6, T.INSET)
+            if not supply:
+                self._checkbox(x0, y, picked)
             name = self.supply if supply else self.names[row]
-            self.create_text(x0, y, text=name, anchor="w",
+            self.create_text(x0 + self._name_x, y, text=name, anchor="w",
                              fill=T.TEXT if picked else T.TEXT_FAINT if supply else T.TEXT_MUTED,
                              font=self._bold if picked else self._font)
             # Round-ended lines: Tk draws them cleaner than a small smoothed polygon.
-            self.create_line(bx0 + 4, y, bx1 - 4, y, width=8, capstyle="round", fill=T.BORDER)
+            b, r = self._bar, self._bar / 2
+            self.create_line(bx0 + r, y, bx1 - r, y, width=b, capstyle="round", fill=T.BORDER)
             if value is not None and value > 0.5:
                 frac = max(0.0, min(1.0, value / self.SCALE))
                 colour = T.TEXT_2 if supply else T.ACCENT if picked else T.TEXT_MUTED
-                self.create_line(bx0 + 4, y, max(bx0 + 4.5, bx0 + 4 + frac * (bx1 - bx0 - 8)), y,
-                                 width=8, capstyle="round", fill=colour)
+                self.create_line(bx0 + r, y, max(bx0 + r + .5, bx0 + r + frac * (bx1 - bx0 - b)),
+                                 y, width=b, capstyle="round", fill=colour)
             if picked and g["target"] is not None:
                 tx = bx0 + max(0.0, min(1.0, g["target"] / self.SCALE)) * (bx1 - bx0)
-                self.create_line(tx, y - 8, tx, y + 8, fill=T.TEXT, width=2)
+                self.create_line(tx, y - b, tx, y + b, fill=T.TEXT, width=max(2, round(r / 2)))
             self.create_text(x0 + gw, y, anchor="e", font=self._mono,
                              text="—" if value is None else f"{value:.0f} kPa",
                              fill=T.TEXT if picked else T.TEXT_MUTED)
 
+    def _checkbox(self, x0, y, on: bool):
+        s, k = self._box, self.scale
+        if on:
+            draw_round(self, x0, y - s / 2, x0 + s, y + s / 2, 4 * k, T.ACCENT)
+            self.create_line(x0 + s * .24, y, x0 + s * .43, y + s * .2, x0 + s * .78, y - s * .22,
+                             fill=T.CANVAS, width=max(2, 2 * k), capstyle="round",
+                             joinstyle="round")
+        else:
+            draw_round(self, x0, y - s / 2, x0 + s, y + s / 2, 4 * k, None, outline=T.TEXT_MUTED)
+
     def _legend(self, x1, y, note: str):
         """At the right of a hand's heading: what the bar and the mark mean, or why it is empty."""
-        small = T.font(11)
+        small = self._small
         if note:
             self.create_text(x1, y, text=note, anchor="e", fill=T.TEXT_FAINT, font=small)
             return
         set_to, now = tr("Set to"), tr("Now")
         x = x1 - small.measure(set_to)
         self.create_text(x1, y, text=set_to, anchor="e", fill=T.TEXT_FAINT, font=small)
-        self.create_line(x - 8, y - 6, x - 8, y + 6, fill=T.TEXT, width=2)
-        x -= 26 + small.measure(now)
+        k = self.scale
+        self.create_line(x - 8 * k, y - 6 * k, x - 8 * k, y + 6 * k, fill=T.TEXT, width=2)
+        x -= 26 * k + small.measure(now)
         self.create_text(x, y, text=now, anchor="w", fill=T.TEXT_FAINT, font=small)
-        self.create_line(x - 22, y, x - 8, y, width=6, capstyle="round", fill=T.ACCENT)
+        self.create_line(x - 22 * k, y, x - 8 * k, y, width=6 * k, capstyle="round",
+                         fill=T.ACCENT)
 
     # -- picking ---------------------------------------------------------------------------------
 
@@ -1641,4 +1561,11 @@ class PressureTable(tk.Canvas):
             self.on_toggle(*at)
 
     def _motion(self, e):
-        self.configure(cursor="hand2" if self._at(e.x, e.y) and self.on_toggle else "")
+        at = self._at(e.x, e.y) if self.on_toggle else None
+        self.configure(cursor="hand2" if at else "")
+        self._set_hover(at)
+
+    def _set_hover(self, at):
+        if at != self._hover:
+            self._hover = at
+            self._draw()

@@ -119,10 +119,10 @@ it is on.
 
 This is where you feel things.
 
-**Tap the fingers you want.** The glove on the screen is the picker: tap a
-fingertip or the palm to pick it, tap again to drop it. Thumb, Index, Middle,
-Ring, Pinky and Palm are the six things a HEXR glove can drive. **All** and
-**None** under the glove pick all six or clear them.
+**Pick the fingers you want.** Tick a finger's box in the list under the glove,
+or tap its fingertip (or the palm) on the glove picture; do it again to drop it.
+Thumb, Index, Middle, Ring, Pinky and Palm are the six things a HEXR glove can
+drive. **All** and **None** pick all six or clear them.
 
 **Pick a hand**, when both gloves are connected: the **Left** and **Right** chips
 under the gloves. A hand that is not picked shows dimmed.
@@ -131,15 +131,12 @@ under the gloves. A hand that is not picked shows dimmed.
 
 | Mode | What it feels like |
 |---|---|
-| **Pressure** | A steady squeeze, for as long as you hold |
+| **Pressure** | A steady squeeze, until you release it |
 | **Vibration** | An oscillation — buzzing, tapping or pulsing depending on frequency |
 
-**Set the levels**, then **press and hold Hold to feel**. The glove presses for
-as long as you hold it and lets go when you do, the way a hand meets an object.
-The space bar does the same.
-
-For a longer run, turn on **Keep on**: then one press starts it and the next
-stops it. **Release all** vents everything.
+**Set the levels**, then press **Trigger**. The fingers picked fire as set and
+stay on until you press **Release all**, which vents everything; it turns red
+while anything is on. Changed a setting? Press **Trigger** again to send it.
 
 The glove on the screen shows what is happening: a point glows white where the
 glove is pressing (from what the glove measures, when it reports it), a
@@ -372,12 +369,11 @@ The same recording can be exported in every shape, as often as you like.
 A haptic glove can hold a finger squeezed. Three ways to stop everything:
 
 - **Escape** — works anywhere in the app
-- **Release all** — under **Hold to feel** on the Test screen
+- **Release all** — beside **Trigger** on the Test screen
 - **Close the app** — every channel is vented on the way out
 
-**Hold to feel** lets go on its own when you release it, when you leave the
-Test screen, and when the window loses focus, even with **Keep on**. Channels
-are also vented automatically when you disconnect a glove.
+A finger you triggered stays on until one of those, even if you leave the Test
+screen. Channels are also vented automatically when you disconnect a glove.
 
 If the app is closed or crashes while something is inflated, powering the arm
 module off releases it.
@@ -392,7 +388,7 @@ module off releases it.
 | *Bluetooth unavailable* | Your PC's Bluetooth is off or has no adapter — not a glove problem. |
 | Connects, then drops | Usually a low battery. Check the light on the module; red means swap the pack. |
 | Connects but no pressure readings | Normal on some gloves. Haptics still work; only Quick test is affected. |
-| Hold to feel is greyed out | No finger is picked: tap one on the glove. With two gloves, check a hand is picked. |
+| Trigger is greyed out | No finger is picked: tick one in the list. With two gloves, check a hand is picked. |
 | Wrong finger responds | Tell us — that is a channel mapping problem worth knowing about. |
 | The connector pushes back | Mismatched sides. Left glove needs the left module. |
 | SmartScreen warning on install | Expected — the build is not signed. **More info → Run anyway**. |

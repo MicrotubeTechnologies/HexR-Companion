@@ -2,7 +2,7 @@
 
 For reviewing the UI without a glove or a headset to hand. It runs the real app with its
 Bluetooth replaced: a search that "finds" one left and two right gloves, and gloves that
-connect, stream pressure and react to the Test pad. The Headsets screen watches
+connect, stream pressure and react to the Test screen's Trigger. The Headsets screen watches
 tools/fake_headset.py, started here. Settings go to a throwaway folder, so nothing you
 have set up is touched.
 
@@ -114,7 +114,7 @@ def main():
             if g.last_rx:
                 g.last_rx = time.monotonic()
             raw = [0.4] * 6 + [45.0]
-            held = test is not None and test.pad.held and hand in app.state.test.hands
+            held = test is not None and test.on and hand in app.state.test.hands
             if held:
                 for ch in app.state.test.channels:
                     raw[ch] = 15 + 35 * (app.state.test.intensity - .1) / .9
@@ -192,14 +192,20 @@ def main():
     at(t, lambda: shot("connect-lit")); t += 2.5
     at(t, lambda: (shot("test-one-glove"), fits("Test"))); t += 0.3
     at(t, lambda: test_screen()._select({0, 1, 2})); t += 0.3
-    at(t, lambda: test_screen().pad.down()); t += 0.6
+    at(t, lambda: test_screen()._trigger()); t += 0.6
     at(t, lambda: shot("test-pressing")); t += 0.3
-    at(t, lambda: test_screen().pad.up()); t += 0.3
+    at(t, lambda: app.all_off()); t += 0.3
     at(t, lambda: connect_glove("Right", "C0:FF:EE:00:02:0B", "HaptGloveAR Right")); t += 0.5
     at(t, lambda: test_screen()._pick_mode("vibration")); t += 0.3
-    at(t, lambda: test_screen().pad.down()); t += 0.5
+    at(t, lambda: test_screen()._trigger()); t += 0.5
     at(t, lambda: shot("test-two-gloves-vibrating")); t += 0.2
-    at(t, lambda: test_screen().pad.up()); t += 0.2
+    at(t, lambda: test_screen()._pick_mode("pressure")); t += 0.2
+    at(t, lambda: test_screen()._trigger()); t += 0.3
+    at(t, lambda: app.shell.toggle_maximise()); t += 1.2
+    at(t, lambda: shot("test-maximised")); t += 0.2
+    at(t, lambda: app.shell.toggle_maximise()); t += 0.8
+    at(t, lambda: test_screen()._pick_mode("vibration")); t += 0.2
+    at(t, lambda: app.all_off()); t += 0.2
     at(t, lambda: details("test", True)); t += 0.3
     at(t, lambda: (driving.update(on=True, t0=time.monotonic()))); t += 1.0
     at(t, lambda: shot("test-details")); t += 4.0
