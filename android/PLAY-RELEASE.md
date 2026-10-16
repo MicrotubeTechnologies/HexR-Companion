@@ -1,4 +1,4 @@
-# Shipping HEXR Tester to the Play Store
+# Shipping HEXR Companion to the Play Store
 
 Everything needed to put version **1.0.0** of the Android app on Google Play,
 in the order you need it.
@@ -147,7 +147,7 @@ git tag android-v1.0.0 && git push origin android-v1.0.0
 ```
 
 The run publishes the usual GitHub Release with the sideload APK, and attaches
-`HexR-Tester-1.0.0.aab` as a **workflow artifact** — deliberately not a release
+`HexR-Companion-1.0.0.aab` as a **workflow artifact** — deliberately not a release
 asset. An `.aab` cannot be installed on a phone, and a download button offering
 one next to the APK is a support ticket waiting to happen.
 
@@ -181,7 +181,7 @@ cap is the answer.
 nothing. The published copy is `docs/privacy.html`, served by GitHub Pages:
 
 ```
-https://microtubetechnologies.github.io/HexR-Window-Tester/privacy.html
+https://microtubetechnologies.github.io/HexR-Companion/privacy.html
 ```
 
 That URL is dead until two things happen: this work reaches `main`, and Pages is

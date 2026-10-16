@@ -1,6 +1,6 @@
-# HEXR Tester for Android
+# HEXR Companion for Android
 
-The HEXR Window Tester as a phone app. Same three screens, same wire protocol,
+The desktop HEXR Companion as a phone app. Same three screens, same wire protocol,
 same quick-test verdicts — so a glove that passes on a bench laptop passes here,
 and a result recorded on either means the same thing.
 
@@ -14,7 +14,7 @@ Bluetooth LE stack.
 **You do not need Android Studio.** GitHub builds it.
 
 - **Any build:** push to this branch, open the repository's **Actions** tab,
-  pick the newest *Build Android APK* run and download the `HexR-Tester-APK`
+  pick the newest *Build Android APK* run and download the `HexR-Companion-APK`
   artifact.
 - **A release:** tag it.
 

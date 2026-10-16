@@ -10,7 +10,7 @@
       "x": 0,
       "y": -210,
       "w": 390,
-      "text": "HEXR Tester for Android — current build, recreated from the Kotlin source.\n\nColours, type sizes, radii and touch targets are lifted from Theme.kt, so what you move here maps back to real values."
+      "text": "HEXR Companion for Android — current build, recreated from the Kotlin source.\n\nColours, type sizes, radii and touch targets are lifted from Theme.kt, so what you move here maps back to real values."
     },
     {
       "id": "note-scroll",

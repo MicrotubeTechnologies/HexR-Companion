@@ -1,4 +1,4 @@
-# Play Console listing — HEXR Tester 1.0.0
+# Play Console listing — HEXR Companion 1.0.0
 
 Everything the Console asks for, written out once so the fields can be pasted
 rather than reinvented at the keyboard. Character limits are Google's; the
@@ -19,10 +19,10 @@ render. It is not uploaded anywhere.
 
 ## Store listing
 
-### App name — 30 max [11]
+### App name — 30 max [14]
 
 ```
-HEXR Tester
+HEXR Companion
 ```
 
 ### Short description — 80 max [77]
@@ -31,12 +31,12 @@ HEXR Tester
 Bluetooth bench tester for HEXR haptic gloves — drive, measure, pass or fail.
 ```
 
-### Full description — 4000 max [3486]
+### Full description — 4000 max [3496]
 
 ```
-HEXR Tester connects to a HEXR pneumatic haptic glove over Bluetooth LE and tells you whether it works.
+HEXR Companion connects to a HEXR pneumatic haptic glove over Bluetooth LE and tells you whether it works.
 
-It is the phone version of the HEXR Window Tester, and it speaks the same wire protocol against the same verdict thresholds — so a glove that passes on a bench laptop passes here, and a result recorded on either means the same thing.
+It is the phone version of the desktop HEXR Companion, and it speaks the same wire protocol against the same verdict thresholds — so a glove that passes on a bench laptop passes here, and a result recorded on either means the same thing.
 
 THREE QUESTIONS IT ANSWERS
 
@@ -78,7 +78,7 @@ Android 8.0 or newer, Bluetooth LE, and a HEXR glove. The glove is the whole poi
 
 This is a test and diagnostic instrument, not a runtime. HEXR gloves have no consumer companion app and do not pair through Android's Bluetooth settings. To build something with HEXR you integrate the com.microtube.hexr Unity package or the Python library; the glove does not need this app to work with your application.
 
-HEXR and HEXR Tester are products of Microtube Technologies.
+HEXR and HEXR Companion are products of Microtube Technologies.
 ```
 
 ### What's new — 500 max [380]
@@ -148,7 +148,7 @@ anything off the device. Telemetry lives in memory for the life of the process.
 ### Privacy policy
 
 ```
-https://microtubetechnologies.github.io/HexR-Window-Tester/privacy.html
+https://microtubetechnologies.github.io/HexR-Companion/privacy.html
 ```
 
 Served by GitHub Pages from `docs/` on `main` — see `docs/privacy.html`. It only

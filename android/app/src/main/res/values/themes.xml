@@ -5,7 +5,7 @@
       as a flash of the wrong colour before the first frame renders — and this
       app opens on a full-bleed splash, so a mismatch here is very visible.
     -->
-    <style name="Theme.HexrTester" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.HexrCompanion" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/screen</item>
         <!--
           Ignored from API 35 on, where the bars are always drawn through and

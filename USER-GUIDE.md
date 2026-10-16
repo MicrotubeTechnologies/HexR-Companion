@@ -20,7 +20,7 @@ Use it to answer three kinds of question:
 ## Install
 
 Download **`HexR-Window-Tester-Setup.exe`** from the
-[latest release](https://github.com/MicrotubeTechnologies/HexR-Window-Tester/releases/latest)
+[latest release](https://github.com/MicrotubeTechnologies/HexR-Companion/releases/latest)
 and run it.
 
 - Windows 10 or 11, 64-bit

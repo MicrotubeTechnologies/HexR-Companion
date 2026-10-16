@@ -18,7 +18,7 @@ It replaces the Unity version (`PneuClutch v1.0`) that lives on the
 ## Install
 
 Download `HexR-Window-Tester-Setup.exe` from the
-[latest release](https://github.com/MicrotubeTechnologies/HexR-Window-Tester/releases/latest).
+[latest release](https://github.com/MicrotubeTechnologies/HexR-Companion/releases/latest).
 
 - Windows 10 or 11, 64-bit
 - Bluetooth Low Energy — built in, or any USB BLE dongle

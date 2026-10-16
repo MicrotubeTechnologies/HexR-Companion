@@ -1,10 +1,10 @@
-# Privacy policy — HEXR Tester for Android
+# Privacy policy — HEXR Companion for Android
 
 Google Play requires a privacy policy at a public URL before an app can be
 published, even one that collects nothing. This is the source text; the
 published copy is `docs/privacy.html`, served by GitHub Pages at
 
-    https://microtubetechnologies.github.io/HexR-Window-Tester/privacy.html
+    https://microtubetechnologies.github.io/HexR-Companion/privacy.html
 
 The two are maintained by hand and must be edited together. Have whoever signs
 off on company copy read this before the first submission — in particular the
@@ -16,7 +16,7 @@ Last updated: 14 October 2026
 
 ---
 
-HEXR Tester is a diagnostic tool for HEXR pneumatic gloves, used by technicians
+HEXR Companion is a diagnostic tool for HEXR pneumatic gloves, used by technicians
 to drive a glove's channels and read back its sensors over Bluetooth, and to
 look after HEXR headsets on the same Wi-Fi at an event.
 
@@ -87,7 +87,7 @@ updated.
 ## Contact
 
 Questions about this policy: open an issue at
-<https://github.com/MicrotubeTechnologies/HexR-Window-Tester/issues>.
+<https://github.com/MicrotubeTechnologies/HexR-Companion/issues>.
 
 A monitored company address would be better here, and should replace this before
 the listing goes to production. The issue tracker is public, is read, and is a

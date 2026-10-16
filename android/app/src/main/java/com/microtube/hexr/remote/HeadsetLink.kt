@@ -142,7 +142,7 @@ class HeadsetLink(
     }
 
     companion object {
-        const val CLIENT = "HexR Tester (Android)"
+        const val CLIENT = "HexR Companion (Android)"
         private const val CONNECT_TIMEOUT_MS = 3000
         private const val SILENCE_TIMEOUT_MS = 4000
         private const val PING_EVERY_MS = 5000L

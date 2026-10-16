@@ -374,7 +374,7 @@ private fun PermissionGate(mustUseSettings: Boolean, onAction: () -> Unit) {
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            "HEXR Tester talks to the glove over Bluetooth. Everything in the app — " +
+            "HEXR Companion talks to the glove over Bluetooth. Everything in the app — " +
                 "connecting, driving a channel, the quick test — needs permission to find " +
                 "and connect to nearby devices.",
             color = T.TEXT_2,
@@ -501,7 +501,7 @@ private fun Header(vm: HexrViewModel, actions: (@Composable RowScope.() -> Unit)
                     .padding(horizontal = 6.dp, vertical = 3.dp),
             ) {
                 Text(
-                    "TESTER",
+                    "COMPANION",
                     color = T.TEXT_3,
                     fontSize = Size.TAG.sp,
                     fontWeight = FontWeight.Bold,

@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "HexR Tester"
+rootProject.name = "HexR Companion"
 include(":app")

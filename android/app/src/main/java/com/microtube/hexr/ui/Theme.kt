@@ -74,7 +74,7 @@ object Size {
     const val CAPTION = 12.5f
     const val MICRO = 11.5f
     const val LABEL = 10.5f     // tracked uppercase section labels
-    const val TAG = 10f         // the TESTER pill
+    const val TAG = 10f         // the COMPANION pill
 }
 
 /** Monospace for every numeric readout: pressures, percentages, Hz, addresses. */
