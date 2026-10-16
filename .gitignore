@@ -11,3 +11,6 @@ __pycache__/
 *.py[cod]
 .venv-mac/
 assets/icon.icns
+
+# The Play upload key and Android build output kept in this checkout. Never commit them.
+/android/
