@@ -22,8 +22,10 @@ from hexr.screens.connect import ConnectScreen
 from hexr.screens.headsets import HeadsetsScreen
 from hexr.screens.recordings import RecordingsScreen
 from hexr.screens.quicktest import QuickTestScreen
+from hexr.screens.sideload import SideloadScreen
 from hexr.screens.test import TestScreen
 from hexr.shell import NAV_OF, Shell
+from hexr.sideload import Sideload
 from hexr.state import HANDS, AppState
 
 UI_HZ = 20
@@ -41,6 +43,8 @@ class App:
         self.engine.start()
         # HEXR headsets on the network. Nothing listens until the Headsets screen is opened.
         self.headsets = Headsets()
+        # Headsets plugged in by USB, for installing apps. adb runs once APK Sideload is opened.
+        self.sideload = Sideload()
 
         self.shell = Shell(root, on_nav=self.navigate, on_gloves=self._gloves_clicked,
                            on_language=self.set_language)
@@ -67,6 +71,7 @@ class App:
             "quicktest": QuickTestScreen(self.shell.content, self),
             "headsets": HeadsetsScreen(self.shell.content, self),
             "recordings": RecordingsScreen(self.shell.content, self),
+            "sideload": SideloadScreen(self.shell.content, self),
         }
         for key, screen in self.screens.items():
             self.shell.register(key, screen)
@@ -126,6 +131,7 @@ class App:
 
     def shutdown(self):
         self.headsets.stop()
+        self.sideload.shutdown()
         self.engine.shutdown()
 
     # -- where the window is -------------------------------------------------

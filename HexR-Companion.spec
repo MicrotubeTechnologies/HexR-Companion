@@ -50,6 +50,15 @@ for _icon in ("assets/icon.ico", "assets/icon-16.png"):
 if os.path.isdir("assets/overlay"):
     datas += [("assets/overlay", "assets/overlay")]
 
+# Google's adb, for the APK Sideload screen, put there by tools/fetch_adb.py. Copied as data,
+# untouched: PyInstaller has no business rewriting or compressing someone else's signed binary.
+# tools/build_mac.sh signs it on macOS. Without it the screen cannot install anything on a
+# computer that has no adb of its own, which is the computer it is for, so the build stops.
+_ADB = "assets/adb/adb" if MAC else "assets/adb/adb.exe"
+if not os.path.isfile(_ADB):
+    raise SystemExit(f"{_ADB} is missing: run  python tools/fetch_adb.py  before building.")
+datas += [("assets/adb", "assets/adb")]
+
 if MAC:
     # tools/build_mac.sh generates icon.icns from icon.png before building.
     icon = "assets/icon.icns" if os.path.exists("assets/icon.icns") else None
@@ -103,6 +112,7 @@ a = Analysis(
         'hexr.screens.test', 'hexr.screens.quicktest',
         'hexr.screens.headsets', 'hexr.screens.fullview', 'hexr.haptics',
         'hexr.overlay', 'hexr.viewer', 'hexr.recorder', 'PIL.ImageTk',
+        'hexr.sideload', 'hexr.screens.sideload',
     ],
     hookspath=[],
     runtime_hooks=[],
@@ -129,7 +139,8 @@ coll = COLLECT(
     exe, a.binaries, a.datas,
     strip=False,
     upx=not MAC,
-    upx_exclude=[],
+    # PyInstaller may count adb as a binary rather than data; either way it stays as Google built it.
+    upx_exclude=['adb.exe', 'AdbWinApi.dll', 'AdbWinUsbApi.dll'],
     name='HexR-Companion',
 )
 

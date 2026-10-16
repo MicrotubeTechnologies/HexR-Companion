@@ -55,9 +55,9 @@ Python 3.10 or newer. The only runtime dependency is `bleak`.
 
 ## Using it
 
-Three entries in the rail: **Test** for this computer's own gloves, **Headsets**
-for HEXR headsets on the network, and **Recordings** for what was recorded from
-them.
+Four entries in the rail: **Test** for this computer's own gloves, **Headsets**
+for HEXR headsets on the network, **Recordings** for what was recorded from
+them, and **APK Sideload** for installing an app on a headset plugged in by USB.
 
 **Test** — until a glove connects it shows a left and a right glove, dimmed, and
 searches on its own: power on the arm module and press **Connect** when it is
@@ -90,6 +90,14 @@ The view needs PyAV, which only the Windows build ships.
 frame by frame. Export makes it a video in landscape (1920×1080) or portrait
 (1080×1920), the view with its gloves beside it, or the view alone. The Recordings
 screen plays a recording in the shape picked before it is exported.
+
+**APK Sideload** — install an `.apk` on a Quest plugged into this computer, as
+SideQuest does, in three steps shown one at a time: plug in the headset, choose
+the APK, Install. The app carries Google's adb (`tools/fetch_adb.py` puts it in
+`assets/adb` before a build), so it needs no internet, which SideQuest does to
+fetch its adb. It never fights other programs for adb's server (Unity runs its
+own): see the top of `hexr/sideload.py`. The headset needs Developer Mode on,
+set once in the Meta Horizon phone app.
 
 **Escape is the panic key**, and **Release all** sits beside Trigger on the Test
 screen; a triggered finger stays on until one of them.
@@ -148,7 +156,7 @@ BUILD-INSTALLER.bat
 ```
 
 Finds Python and Inno Setup (offering to install either), regenerates the icon,
-runs PyInstaller, compiles the installer to `Installer\HexR-Companion-Setup.exe`,
+fetches adb, runs PyInstaller, compiles the installer to `Installer\HexR-Companion-Setup.exe`,
 and zips a portable build.
 
 Or let CI do it: push a `v*` tag and
@@ -168,7 +176,8 @@ name would break that permalink on every release.
 tools/build_mac.sh
 ```
 
-Builds a universal app with PyInstaller (same spec as Windows), signs it with
+Fetches adb, builds a universal app with PyInstaller (same spec as Windows), signs it
+(adb inside it on its own first) with
 the hardened runtime, wraps it in a signed installer at
 `dist/HexR-Companion-Mac.pkg`, notarizes it with Apple and staples the
 ticket. That `.pkg` is the file to upload to the website. Like the Windows installer, the filename carries no version, so the
@@ -211,15 +220,18 @@ hexr/
   recorder.py         the view as it came, and what the gloves did, recorded
   exporter.py         a recording made into a video in the shape wanted
   player.py           a recording played back as it will be exported
+  sideload.py         adb: the headsets plugged in by USB, and installing on one
   theme.py            design tokens
   widgets.py          the Canvas widget library
   shell.py            frameless window, title bar, nav rail, language switch
   i18n.py             English and Simplified Chinese: tr() and the Chinese table
   settings.py         what is kept between runs: headset names, the language, Details
-  screens/            connect · test · quicktest · headsets · fullview · recordings
-tests/                protocol, remote, overlay, glove and language tests, no hardware needed
+  screens/            connect · test · quicktest · headsets · fullview · recordings · sideload
+tests/                protocol, remote, overlay, glove, sideload and language tests, no hardware
+                      needed (fake_adb.py stands in for adb)
 packaging/            Inno Setup script and wizard art
 tools/make_icon.py    generates the app icon
+tools/fetch_adb.py    puts Google's adb, pinned and hash-checked, in assets/adb for the build
 tools/fake_headset.py a pretend headset, for trying the Headsets screen without
                       a Quest: video, glove status and haptics on this computer
 tools/ui_snapshots.py screenshots of every screen in English or Chinese, with pretend

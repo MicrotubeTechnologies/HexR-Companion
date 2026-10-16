@@ -132,3 +132,23 @@ Type: filesandordirs; Name: "{autoprograms}\HEXR Window Tester"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\__pycache__"
+
+; The APK Sideload screen runs the adb inside the app, and adb leaves its server running after
+; the app closes, since another program may be using it by then. That server would hold
+; adb.exe open, and an upgrade could not replace it or an uninstall remove it, so both stop it
+; first. Whatever next needs adb starts a server again.
+[UninstallRun]
+Filename: "{app}\_internal\assets\adb\adb.exe"; Parameters: "kill-server"; \
+    Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopAdb"
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Adb: String;
+  ResultCode: Integer;
+begin
+  Adb := ExpandConstant('{app}\_internal\assets\adb\adb.exe');
+  if FileExists(Adb) then
+    Exec(Adb, 'kill-server', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := '';
+end;

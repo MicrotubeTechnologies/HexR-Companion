@@ -7,6 +7,9 @@ Installer/
 # Generated at build time from tools/make_icon.py
 assets/icon-preview.png
 
+# Google's adb, fetched by tools/fetch_adb.py before a build
+assets/adb/
+
 __pycache__/
 *.py[cod]
 .venv-mac/

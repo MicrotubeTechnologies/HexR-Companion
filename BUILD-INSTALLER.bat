@@ -57,11 +57,15 @@ echo  [1/5] Installing build tools. First run takes a minute...
 %PY% -m pip install --quiet -r requirements.txt pyinstaller pillow
 if errorlevel 1 goto :deps_failed
 
-REM --- 2. Icon ----------------------------------------------------------------
-REM Regenerated every build, so the shipped icon can never drift from the
-REM generator in tools\ - which is the thing anyone would actually edit.
-echo  [2/5] Drawing the app icon...
+REM --- 2. Icon and adb ---------------------------------------------------------
+REM The icon is regenerated every build, so the shipped icon can never drift
+REM from the generator in tools\ - which is the thing anyone would actually edit.
+REM adb is Google's, for the APK Sideload screen: the app carries it, so it
+REM needs no internet. Downloaded once and checked against a pinned hash.
+echo  [2/5] Drawing the app icon and fetching adb...
 %PY% tools\make_icon.py
+if errorlevel 1 goto :fail
+%PY% tools\fetch_adb.py
 if errorlevel 1 goto :fail
 
 REM --- 3. The app -------------------------------------------------------------

@@ -3,8 +3,8 @@
 For reviewing the UI without a glove or a headset to hand. It runs the real app with its
 Bluetooth replaced: a search that "finds" one left and two right gloves, and gloves that
 connect, stream pressure and react to the Test screen's Trigger. The Headsets screen watches
-tools/fake_headset.py, started here. Settings go to a throwaway folder, so nothing you
-have set up is touched.
+tools/fake_headset.py, started here, and APK Sideload runs tests/fake_adb.py in place of adb.
+Settings go to a throwaway folder, so nothing you have set up is touched.
 
     python tools/ui_snapshots.py --lang en --out snapshots
     python tools/ui_snapshots.py --lang zh --out snapshots
@@ -18,6 +18,7 @@ while it runs.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import subprocess
@@ -43,6 +44,13 @@ def main():
     # Settings in a folder of their own, before anything reads them.
     os.environ["APPDATA"] = tempfile.mkdtemp(prefix="hexr-snapshots-")
     os.environ["HEXR_VIDEOS"] = tempfile.mkdtemp(prefix="hexr-snapshots-videos-")
+    # A pretend adb, told what to pretend through a file of its own, and an APK to install.
+    fake_adb = os.path.join(os.environ["APPDATA"], "fake-adb.json")
+    os.environ["HEXR_ADB"] = os.path.join(ROOT, "tests", "fake_adb.py")
+    os.environ["HEXR_FAKE_ADB"] = fake_adb
+    apk = os.path.join(os.environ["APPDATA"], "HexR-Demo-1.2.apk")
+    with open(apk, "wb") as f:
+        f.write(os.urandom(312_000))
     from hexr import i18n
     i18n._lang = args.lang
 
@@ -228,6 +236,36 @@ def main():
     at(t, lambda: app.open_panel("connect")); t += 0.8
     at(t, lambda: shot("gloves-panel")); t += 0.3
     at(t, lambda: app.close_panel()); t += 0.2
+
+    # -- APK Sideload
+    def adb_pretends(**state):
+        with open(fake_adb, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+    quest = ["2G0YC1ZF9602Q1", "device", "Quest_3"]
+    sideload = lambda: app.screens["sideload"]  # noqa: E731
+    at(t, lambda: adb_pretends(devices=[])); t += 0.1
+    at(t, lambda: app.navigate("sideload")); t += 1.5
+    at(t, lambda: (shot("sideload-plug-in"), fits("APK Sideload"))); t += 0.2
+    at(t, lambda: sideload()._toggle_help()); t += 0.4
+    at(t, lambda: (shot("sideload-help"), fits("APK Sideload, not showing up"))); t += 0.2
+    at(t, lambda: sideload()._toggle_help()); t += 0.1
+    at(t, lambda: adb_pretends(devices=[["1WMHH815K21234", "unauthorized"]])); t += 1.8
+    at(t, lambda: shot("sideload-allow")); t += 0.2
+    at(t, lambda: adb_pretends(devices=[quest], install="incompatible", seconds=3)); t += 1.8
+    at(t, lambda: shot("sideload-choose")); t += 0.2
+    at(t, lambda: (app.sideload.choose(apk), sideload()._refresh())); t += 0.6
+    at(t, lambda: shot("sideload-ready")); t += 0.2
+    at(t, lambda: sideload()._install_clicked()); t += 1.5
+    at(t, lambda: shot("sideload-installing")); t += 2.5
+    at(t, lambda: (shot("sideload-other-key"), fits("APK Sideload, failed"))); t += 0.2
+    at(t, lambda: sideload()._fix()); t += 4.0
+    at(t, lambda: shot("sideload-installed")); t += 0.2
+    at(t, lambda: details("sideload", True)); t += 0.6
+    at(t, lambda: shot("sideload-details")); t += 0.2
+    at(t, lambda: details("sideload", False)); t += 0.2
+    at(t, lambda: adb_pretends(devices=[quest, ["340YC10G9A0123", "device", "Quest_3S"]])); t += 1.5
+    at(t, lambda: sideload()._other_headset()); t += 0.5
+    at(t, lambda: shot("sideload-pick")); t += 0.2
 
     def start_headset():
         nonlocal headset

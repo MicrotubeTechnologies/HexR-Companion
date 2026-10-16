@@ -61,6 +61,12 @@ fi
 step "Running protocol tests"
 "$VENV/bin/python" tests/test_protocol.py
 "$VENV/bin/python" tests/test_remote.py
+"$VENV/bin/python" tests/test_sideload.py
+
+# -------------------------------------------------------------- adb
+# Google's adb for the APK Sideload screen: the app carries it, so it needs no internet.
+step "Fetching adb"
+"$VENV/bin/python" tools/fetch_adb.py --platform mac
 
 # -------------------------------------------------------------- icon
 step "Generating icon.icns"
@@ -79,6 +85,11 @@ rm -rf build "dist/$APP_NAME" "$APP"
 "$VENV/bin/pyinstaller" --noconfirm --log-level WARN HexR-Companion.spec
 [[ -d "$APP" ]] || die "PyInstaller did not produce $APP"
 lipo -archs "$APP/Contents/MacOS/HexR-Companion"
+ADB_BIN="$(find "$APP" -type f -name adb | head -1)"
+[[ -n "$ADB_BIN" ]] || die "adb is missing from $APP"
+ADB_ARCHS="$(lipo -archs "$ADB_BIN")"
+[[ "$ADB_ARCHS" == *x86_64* && "$ADB_ARCHS" == *arm64* ]] \
+  || die "$ADB_BIN is $ADB_ARCHS, not universal"
 
 # -------------------------------------------------------------- sign
 if [[ -z "${SIGN_IDENTITY:-}" ]]; then
@@ -93,6 +104,14 @@ fi
 
 step "Signing with: $SIGN_IDENTITY"
 xattr -cr "$APP"
+# adb is copied in as data, where --deep may not look for code, and notarization rejects any
+# binary in the bundle that is not signed with our Developer ID and the hardened runtime. So it
+# is signed on its own first, with no entitlements: it needs none of the app's.
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+  codesign --force --sign - "$ADB_BIN"
+else
+  codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" "$ADB_BIN"
+fi
 if [[ "$SIGN_IDENTITY" == "-" ]]; then
   codesign --force --deep --sign - "$APP"
 else
