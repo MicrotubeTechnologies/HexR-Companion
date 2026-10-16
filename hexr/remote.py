@@ -561,6 +561,7 @@ class VideoReceiver:
         self.message = ""
         self.render_error = ""
         self.frames = 0
+        self.bad_packets = 0
         threading.Thread(target=self._run, name=f"hexr-video-{host}", daemon=True).start()
 
     def latest(self):
@@ -591,14 +592,29 @@ class VideoReceiver:
             if codec != CODEC_H264:
                 raise ValueError(f"unknown video codec {codec}")
             decoder = av.CodecContext.create("h264", "r")
+            config = b""
             while not self._stop.is_set():
-                length, _flags, pts = parse_packet_header(_read_exact(sock, 13))
+                length, flags, pts = parse_packet_header(_read_exact(sock, 13))
                 payload = _read_exact(sock, length)
+                # A new viewer is sent the encoder's SPS/PPS on their own first. FFmpeg refuses a
+                # packet with no picture in it, so they go in front of the next one instead.
+                if flags & FLAG_CONFIG:
+                    config = payload
+                    continue
+                if config:
+                    payload, config = config + payload, b""
                 # One packet is one encoder output, so it goes to the decoder whole, carrying its
                 # presentation time: that is what puts each haptic touch on the right frame.
                 packet = av.Packet(payload)
                 packet.pts = pts
-                for frame in decoder.decode(packet):
+                try:
+                    frames = decoder.decode(packet)
+                except av.error.InvalidDataError:
+                    # One packet the decoder cannot read costs that frame, not the view: it
+                    # picks up again at the next keyframe, at most a second away.
+                    self.bad_packets += 1
+                    continue
+                for frame in frames:
                     self._keep(frame, pts if frame.pts is None else frame.pts, time.monotonic())
             self.state = "ended"
         except (OSError, ValueError, EOFError) as e:

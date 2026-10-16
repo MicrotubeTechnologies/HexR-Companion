@@ -10,6 +10,7 @@ Run: python -m pytest tests -q      (or: python tests/test_remote.py)
 from __future__ import annotations
 
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -336,3 +337,68 @@ def test_a_link_hands_haptics_lines_to_its_listener():
     link = R.HeadsetLink("q3-1", "127.0.0.1", 1, Listener())
     link._handle(REFERENCE_HAPTICS.encode())
     assert got == [("q3-1", "right")]
+
+
+# -- the view, against a stand-in headset's video port ---------------------------------------
+
+def _h264_packets(count: int) -> list[bytes]:
+    """`count` frames of H.264 as a headset sends them: Annex-B, SPS/PPS on the keyframe."""
+    import av
+    from fractions import Fraction
+    from PIL import Image
+    enc = av.CodecContext.create("libx264", "w")
+    enc.width, enc.height, enc.pix_fmt = 64, 64, "yuv420p"
+    enc.time_base = Fraction(1, 30)
+    enc.options = {"preset": "ultrafast", "tune": "zerolatency"}
+    out = []
+    for i in range(count):
+        frame = av.VideoFrame.from_image(Image.new("RGB", (64, 64), (i * 9 % 255, 80, 160)))
+        frame.pts = i
+        out += [bytes(p) for p in enc.encode(frame)]
+    out += [bytes(p) for p in enc.encode(None)]
+    return out
+
+
+def _video_packet(payload: bytes, flags: int, pts: int) -> bytes:
+    return len(payload).to_bytes(4, "big") + bytes([flags]) + pts.to_bytes(8, "big") + payload
+
+
+def test_the_view_starts_after_the_config_packet_and_survives_a_bad_one():
+    av = __import__("pytest").importorskip("av")
+    try:
+        av.codec.Codec("libx264", "w")
+    except Exception:  # noqa: BLE001
+        __import__("pytest").skip("no libx264 in this PyAV")
+    packets = _h264_packets(12)
+    key = packets[0]
+    # SPS/PPS: everything before the first IDR slice (NAL type 5), whatever its start code.
+    idr = next(m.start() for m in re.finditer(b"\x00\x00\x01", key) if key[m.end()] & 0x1F == 5)
+    config = key[:idr - 1 if key[idr - 1:idr] == b"\x00" else idr]
+    assert config
+    stream = [_video_packet(config, R.FLAG_CONFIG, 0),           # what a new viewer gets first
+              _video_packet(key, R.FLAG_KEYFRAME, 1000)]
+    stream += [_video_packet(p, 0, 1000 + 33333 * (i + 1)) for i, p in enumerate(packets[1:6])]
+    stream += [_video_packet(b"\x00\x00\x00\x01\x41" + b"\xff" * 40, 0, 300000)]   # damaged
+    stream += [_video_packet(p, 0, 400000 + 33333 * i) for i, p in enumerate(packets[6:])]
+
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+
+    def serve():
+        conn, _ = server.accept()
+        conn.sendall(b"HXV1" + (64).to_bytes(2, "big") * 2 + bytes([R.CODEC_H264]))
+        for p in stream:
+            conn.sendall(p)
+        time.sleep(1.0)
+        conn.close()
+        server.close()
+    threading.Thread(target=serve, daemon=True).start()
+
+    view = R.VideoReceiver("127.0.0.1", server.getsockname()[1], lambda f, pts, t: f)
+    try:
+        assert _wait_for(lambda: view.frames >= len(packets) - 2), \
+            f"{view.frames} frames, {view.state}: {view.message}"
+        assert view.state == "playing"
+    finally:
+        view.stop()

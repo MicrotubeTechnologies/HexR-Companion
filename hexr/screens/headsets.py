@@ -40,6 +40,7 @@ COMMANDS_W = 900          # the content column, less a margin
 LIST_EVERY = 4            # ticks between list refreshes: 20 Hz / 4 = 5 Hz, what a headset sends
 DOTS_EVERY = 8            # ticks per step of the searching dots: 20 Hz / 8 = 0.4 s
 SAVED_SHOWN_S = 15.0      # how long "Show in folder" stays after a recording is saved
+VIDEO_RETRY_S = 3.0       # a view that dropped while the headset still shares it: join again
 VIEW_FILE = "view.json"
 
 
@@ -361,6 +362,7 @@ class _Detail(tk.Frame):
                                 anchor="w", justify="left")
 
         self._view_wanted = False
+        self._video_retry_at = 0.0
         self._last_stream = R.StreamState()
         self._unavailable = R.video_available()
         self._fit = self._inline_fit()
@@ -597,6 +599,14 @@ class _Detail(tk.Frame):
         allowed = bool(s and s.allow_video) and not self._unavailable
         if live and self._view_wanted and self.video is None:
             self.video = R.VideoReceiver(r.host, st.port, self._render)
+        elif live and self._view_wanted and self.video.state in ("failed", "ended")                 and time.monotonic() - self._video_retry_at > VIDEO_RETRY_S:
+            # The view dropped but the headset is still sharing it: join again, a recording
+            # going on carrying over to the new connection.
+            self._video_retry_at = time.monotonic()
+            old = self.video
+            self.video = R.VideoReceiver(r.host, st.port, self._render)
+            self.video.taps = old.taps
+            old.stop()
         if not live and self.video is not None and st.state != "requesting":
             self._stop_video()
         self._update_recording()
