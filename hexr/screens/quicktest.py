@@ -17,6 +17,7 @@ import tkinter as tk
 
 from .. import protocol as P
 from .. import theme as T
+from ..i18n import N_, tr
 from ..state import HANDS
 from ..widgets import Button, Cell, Divider, Progress, Surface
 from .base import Screen, section_label
@@ -46,9 +47,9 @@ VERDICT_COLOURS = {
 
 
 class QuickTestScreen(Screen):
-    title_text = "Quick test"
-    sub_text = ("Drives every channel to full for two seconds and reports what "
-                "each one reached. Take the glove off first.")
+    title_text = N_("Quick test")
+    sub_text = N_("Drives every channel to full for two seconds and reports what "
+                  "each one reached. Take the glove off first.")
 
     def __init__(self, parent, app):
         super().__init__(parent, app)
@@ -62,18 +63,19 @@ class QuickTestScreen(Screen):
         self._t_peak: dict[int, float] = {}
         self._source_peak = 0.0
 
-        section_label(self.body, "Glove to test").pack(fill="x")
+        section_label(self.body, tr("Glove to test")).pack(fill="x")
         row = tk.Frame(self.body, bg=T.SURFACE)
         row.pack(fill="x", pady=(8, 0))
         for hand in HANDS:
-            c = Cell(row, hand, sub="not connected", command=self._pick_hand,
+            c = Cell(row, tr(hand), sub=tr("not connected"),
+                     command=lambda _l, h=hand: self._pick_hand(h),
                      height=52, mono_label=False)
             c.pack(side="left", fill="x", expand=True, padx=(0, 8))
             self._hand_cells[hand] = c
 
         bar = tk.Frame(self.body, bg=T.SURFACE)
         bar.pack(fill="x", pady=(20, 0))
-        self.run_btn = Button(bar, "Run quick test", command=self._toggle,
+        self.run_btn = Button(bar, tr("Run quick test"), command=self._toggle,
                               glyph="▶", min_width=180)
         self.run_btn.pack(side="left")
         self.status = tk.Label(bar, text="", bg=T.SURFACE, fg=T.TEXT_MUTED,
@@ -97,9 +99,9 @@ class QuickTestScreen(Screen):
     def _build_table(self):
         head = tk.Frame(self.results, bg=T.RAISED)
         head.pack(fill="x", padx=18, pady=(14, 0))
-        for i, (label, width) in enumerate((("Channel", 120), ("Peak", 110),
-                                            ("Time to peak", 130),
-                                            ("Verdict", None))):
+        for i, (label, width) in enumerate(((tr("Channel"), 120), (tr("Peak"), 110),
+                                            (tr("Time to peak"), 130),
+                                            (tr("Verdict"), None))):
             section_label(head, label, bg=T.RAISED).grid(
                 row=0, column=i, sticky="w", padx=(0, 10))
             if width:
@@ -113,7 +115,7 @@ class QuickTestScreen(Screen):
             row.pack(fill="x", padx=18)
             cells = {}
             for i, (text, font, width) in enumerate((
-                    (P.FINGER_LABELS[finger], T.font(13), 120),
+                    (tr(P.FINGER_LABELS[finger]), T.font(13), 120),
                     ("—", T.mono(11.5), 110),
                     ("—", T.mono(11.5), 130),
                     ("—", T.font(12.5), None))):
@@ -130,26 +132,26 @@ class QuickTestScreen(Screen):
 
     # -- run ------------------------------------------------------------------
 
-    def _pick_hand(self, label):
-        g = self.app.state.get(label)
+    def _pick_hand(self, hand):
+        g = self.app.state.get(hand)
         if g and g.connected:
-            self.hand = label
+            self.hand = hand
             self.refresh()
 
     def _toggle(self):
         if self._phase in ("settle", "drive"):
-            self._abort("Stopped")
+            self._abort(tr("Stopped"))
             return
         self._start()
 
     def _start(self):
         g = self.app.state.get(self.hand) if self.hand else None
         if not g or not g.connected:
-            self.status.configure(text="Connect a glove first", fg=T.DANGER)
+            self.status.configure(text=tr("Connect a glove first"), fg=T.DANGER)
             return
         if not g.is_live():
             self.status.configure(
-                text="That glove is not sending telemetry — nothing to measure",
+                text=tr("That glove is not sending telemetry — nothing to measure"),
                 fg=T.DANGER)
             return
         self._peak = {int(f): 0.0 for f in P.ALL_FINGERS}
@@ -162,22 +164,22 @@ class QuickTestScreen(Screen):
         self.app.send([self.hand], P.all_off())
         self._phase = "settle"
         self._t0 = time.monotonic()
-        self.run_btn.set(text="Stop", glyph="■")
-        self.status.configure(text="Venting…", fg=T.TEXT_MUTED)
+        self.run_btn.set(text=tr("Stop"), glyph="■")
+        self.status.configure(text=tr("Venting…"), fg=T.TEXT_MUTED)
 
     def stop_if_running(self):
         """For closing the panel mid-sweep. The sweep advances on this screen's
         tick, which stops when it is hidden, so leaving it running would leave
         every channel at full pressure. Abort instead, which vents the glove."""
         if self._phase in ("settle", "drive"):
-            self._abort("Stopped")
+            self._abort(tr("Stopped"))
 
     def _abort(self, why: str):
         self._phase = "idle"
         if self.hand:
             self.app.send([self.hand], P.all_off())
         self.progress.set(0.0)
-        self.run_btn.set(text="Run quick test", glyph="▶")
+        self.run_btn.set(text=tr("Run quick test"), glyph="▶")
         self.status.configure(text=why, fg=T.TEXT_MUTED)
 
     def on_tick(self):
@@ -186,7 +188,7 @@ class QuickTestScreen(Screen):
             return
         g = self.app.state.get(self.hand) if self.hand else None
         if not g or not g.connected:
-            self._abort("Glove disconnected")
+            self._abort(tr("Glove disconnected"))
             return
 
         elapsed = time.monotonic() - self._t0
@@ -199,7 +201,7 @@ class QuickTestScreen(Screen):
                     P.pressure(f, True, 1.0, 1.0) for f in P.ALL_FINGERS))
                 self._phase = "drive"
                 self._t0 = time.monotonic()
-                self.status.configure(text="Driving all channels…", fg=T.ACCENT)
+                self.status.configure(text=tr("Driving all channels…"), fg=T.ACCENT)
             return
 
         # drive
@@ -218,7 +220,7 @@ class QuickTestScreen(Screen):
         self.app.send([self.hand], P.all_off())
         self._phase = "done"
         self.progress.set(1.0, T.SUCCESS)
-        self.run_btn.set(text="Run quick test", glyph="▶")
+        self.run_btn.set(text=tr("Run quick test"), glyph="▶")
 
         pump_dead = self._source_peak < SOURCE_MIN_KPA
         good = poor = failed = 0
@@ -236,37 +238,40 @@ class QuickTestScreen(Screen):
             cells[1].configure(text=f"{peak:.1f} kPa")
             cells[2].configure(
                 text=f"{self._t_peak[chan]:.2f} s" if peak > 0 else "—")
-            cells[3].configure(text=verdict,
+            cells[3].configure(text=tr(verdict),
                                fg=VERDICT_COLOURS.get(verdict, T.TEXT_2))
 
-        breakdown = f"{good} good, {poor} poor, {failed} failed"
-        source = f"Source reached {self._source_peak:.1f} kPa"
+        breakdown = tr("{good} good, {poor} poor, {failed} failed",
+                       good=good, poor=poor, failed=failed)
+        kpa = f"{self._source_peak:.1f}"
 
         if pump_dead:
-            self.status.configure(text="Pump failed", fg=T.DANGER)
+            self.status.configure(text=tr("Pump failed"), fg=T.DANGER)
             self.summary.configure(
-                text=f"The source never rose above {self._source_peak:.1f} kPa, "
-                     "so no channel could have reached pressure. This is one "
-                     "fault in the pump or its supply, not six failed channels.",
+                text=tr("The source never rose above {kpa} kPa, so no channel could "
+                        "have reached pressure. This is one fault in the pump or its "
+                        "supply, not six failed channels.", kpa=kpa),
                 fg=T.DANGER)
         elif failed:
-            self.status.configure(text=f"{failed} of 6 channels failed",
+            self.status.configure(text=tr("{n} of 6 channels failed", n=failed),
                                   fg=T.DANGER)
             self.summary.configure(
-                text=f"{source}, so supply is fine — a channel reading nothing "
-                     "with a healthy source is a blocked line, a valve that "
-                     f"never opened, or a dead indenter. {breakdown}.",
+                text=tr("Source reached {kpa} kPa, so supply is fine — a channel "
+                        "reading nothing with a healthy source is a blocked line, a "
+                        "valve that never opened, or a dead indenter. {breakdown}.",
+                        kpa=kpa, breakdown=breakdown),
                 fg=T.DANGER)
         elif poor:
-            self.status.configure(text=f"{poor} of 6 channels poor", fg=T.ACCENT)
+            self.status.configure(text=tr("{n} of 6 channels poor", n=poor), fg=T.ACCENT)
             self.summary.configure(
-                text=f"{source}. Every channel moved, but not all of them "
-                     "reached full pressure — check the tubing on the weak "
-                     f"ones. {breakdown}.",
+                text=tr("Source reached {kpa} kPa. Every channel moved, but not all of "
+                        "them reached full pressure — check the tubing on the weak "
+                        "ones. {breakdown}.", kpa=kpa, breakdown=breakdown),
                 fg=T.TEXT_MUTED)
         else:
-            self.status.configure(text="All 6 channels good", fg=T.SUCCESS)
-            self.summary.configure(text=f"{source}.", fg=T.TEXT_MUTED)
+            self.status.configure(text=tr("All 6 channels good"), fg=T.SUCCESS)
+            self.summary.configure(text=tr("Source reached {kpa} kPa.", kpa=kpa),
+                                   fg=T.TEXT_MUTED)
 
     @staticmethod
     def _verdict(peak: float) -> str:
@@ -291,7 +296,7 @@ class QuickTestScreen(Screen):
             if self.hand == hand and not live:
                 self.hand = None
             cell.set(live and self.hand == hand)
-            cell.sub = "connected" if live else "not connected"
+            cell.sub = tr("connected") if live else tr("not connected")
             cell.render()
         if self.hand is None:
             for hand in HANDS:

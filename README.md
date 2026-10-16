@@ -1,4 +1,4 @@
-# HEXR Window Tester
+# HEXR Companion
 
 A Windows and macOS app for testing HEXR haptic gloves. Scan, connect a left and/or right
 glove, drive any channel, watch what the hardware reports back, and run a
@@ -6,19 +6,20 @@ pass/fail sweep on all six channels.
 
 **This is a test and diagnostic tool, not a runtime.** To *build* with HEXR you
 integrate the [`com.microtube.hexr`](https://github.com/MicrotubeTechnologies/com.microtube.hexr)
-Unity package or the Python control library — the glove has no companion app
-and does not pair through Windows Bluetooth settings. This app opens its own
-connection, the same way your application will.
+Unity package or the Python control library — the glove needs no app of its
+own and does not pair through Windows Bluetooth settings. This app opens its
+own connection, the same way your application will.
 
-It replaces the Unity version (`PneuClutch v1.0`) that lives on the
+Until 0.4.0 it was called HEXR Window Tester, and the repository still carries
+that name. It replaces the Unity version (`PneuClutch v1.0`) that lives on the
 `New-Version` branch. Same job, no game engine.
 
 ---
 
 ## Install
 
-Download `HexR-Window-Tester-Setup.exe` from the
-[latest release](https://github.com/MicrotubeTechnologies/HexR-Window-Tester/releases/latest).
+Download `HexR-Companion-Setup.exe` from the
+[latest release](https://github.com/MicrotubeTechnologies/HexR-Companion/releases/latest).
 
 - Windows 10 or 11, 64-bit
 - Bluetooth Low Energy — built in, or any USB BLE dongle
@@ -30,8 +31,8 @@ build provenance so the download can be verified.
 
 ### macOS
 
-Download `HexR-Window-Tester-Mac.pkg`, double-click it, and follow the
-installer. It puts **HEXR Window Tester** in Applications.
+Download `HexR-Companion-Mac.pkg`, double-click it, and follow the
+installer. It puts **HEXR Companion** in Applications.
 
 - macOS 10.13 or newer, Apple silicon or Intel (one universal app)
 - On first scan macOS asks for Bluetooth access — choose **Allow**. If it was
@@ -79,6 +80,9 @@ The view needs PyAV, which only the Windows build ships.
 **Escape is the panic key**, and **All off** sits beside Trigger and Release on
 the Test screen. All channels are also vented on disconnect, on exit, and when
 the Quick test panel is closed mid-run.
+
+**English | 中文** at the bottom of the rail, above the version, switches the
+whole app between English and Simplified Chinese, and the choice is remembered.
 
 ---
 
@@ -129,7 +133,7 @@ BUILD-INSTALLER.bat
 ```
 
 Finds Python and Inno Setup (offering to install either), regenerates the icon,
-runs PyInstaller, compiles the installer to `Installer\HexR-Window-Tester-Setup.exe`,
+runs PyInstaller, compiles the installer to `Installer\HexR-Companion-Setup.exe`,
 and zips a portable build.
 
 Or let CI do it: push a `v*` tag and
@@ -151,7 +155,7 @@ tools/build_mac.sh
 
 Builds a universal app with PyInstaller (same spec as Windows), signs it with
 the hardened runtime, wraps it in a signed installer at
-`dist/HexR-Window-Tester-Mac.pkg`, notarizes it with Apple and staples the
+`dist/HexR-Companion-Mac.pkg`, notarizes it with Apple and staples the
 ticket. That `.pkg` is the file to upload to the website. Like the Windows installer, the filename carries no version, so the
 download link can stay the same from release to release.
 
@@ -187,9 +191,11 @@ hexr/
   headsets.py         the Headsets screen's model of every headset
   theme.py            design tokens
   widgets.py          the Canvas widget library
-  shell.py            frameless window, title bar, nav rail
+  shell.py            frameless window, title bar, nav rail, language switch
+  i18n.py             English and Simplified Chinese: tr() and the Chinese table
+  settings.py         what is kept between runs: headset names, the language
   screens/            connect · test · quicktest · headsets
-tests/                protocol and remote tests, no hardware needed
+tests/                protocol, remote and language tests, no hardware needed
 packaging/            Inno Setup script and wizard art
 tools/make_icon.py    generates the app icon
 ```

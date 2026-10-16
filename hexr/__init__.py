@@ -1,1 +1,1 @@
-"""HEXR Window Tester — desktop app package."""
+"""HEXR Companion — desktop app package."""

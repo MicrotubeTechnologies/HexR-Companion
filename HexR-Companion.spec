@@ -1,14 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec for the HEXR Window Tester app.
+# PyInstaller spec for the HEXR Companion app.
 #
-#     pyinstaller --noconfirm HexR-Window-Tester.spec
+#     pyinstaller --noconfirm HexR-Companion.spec
 #
-# Produces a FOLDER build at dist\HexR-Window-Tester\, with a no-console
-# HexR-Window-Tester.exe inside it. That folder is what the Inno Setup script in
+# Produces a FOLDER build at dist\HexR-Companion\, with a no-console
+# HexR-Companion.exe inside it. That folder is what the Inno Setup script in
 # packaging\ turns into the single installer .exe, and what BUILD-INSTALLER.bat
 # also zips as the portable download.
 #
-# On macOS the same spec produces dist/HEXR Window Tester.app (a universal2
+# On macOS the same spec produces dist/HEXR Companion.app (a universal2
 # bundle when built with the python.org Python); tools/build_mac.sh signs,
 # notarizes and wraps it in a DMG.
 #
@@ -73,12 +73,12 @@ else:
         kids=[
             StringFileInfo([StringTable('040904B0', [
                 StringStruct('CompanyName', 'Microtube Technologies'),
-                StringStruct('FileDescription', 'HEXR Window Tester'),
+                StringStruct('FileDescription', 'HEXR Companion'),
                 StringStruct('FileVersion', '.'.join(str(n) for n in _quad)),
-                StringStruct('InternalName', 'HexR-Window-Tester'),
+                StringStruct('InternalName', 'HexR-Companion'),
                 StringStruct('LegalCopyright', '© Microtube Technologies'),
-                StringStruct('OriginalFilename', 'HexR-Window-Tester.exe'),
-                StringStruct('ProductName', 'HEXR Window Tester'),
+                StringStruct('OriginalFilename', 'HexR-Companion.exe'),
+                StringStruct('ProductName', 'HEXR Companion'),
                 StringStruct('ProductVersion', '.'.join(str(n) for n in _quad)),
             ])]),
             VarFileInfo([VarStruct('Translation', [1033, 1200])]),
@@ -108,7 +108,7 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [],
     exclude_binaries=True,        # folder build: binaries go in COLLECT
-    name='HexR-Window-Tester',
+    name='HexR-Companion',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -124,19 +124,21 @@ coll = COLLECT(
     strip=False,
     upx=not MAC,
     upx_exclude=[],
-    name='HexR-Window-Tester',
+    name='HexR-Companion',
 )
 
 if MAC:
     app = BUNDLE(
         coll,
-        name='HEXR Window Tester.app',
+        name='HEXR Companion.app',
         icon=icon,
+        # Kept from when the app was HEXR Window Tester: a new id would make macOS
+        # treat it as another app and ask for Bluetooth all over again.
         bundle_identifier='tech.microtube.hexr-window-tester',
         version=APP_VERSION,
         info_plist={
-            'CFBundleName': 'HEXR Window Tester',
-            'CFBundleDisplayName': 'HEXR Window Tester',
+            'CFBundleName': 'HEXR Companion',
+            'CFBundleDisplayName': 'HEXR Companion',
             'CFBundleShortVersionString': APP_VERSION,
             'CFBundleVersion': APP_VERSION,
             'LSMinimumSystemVersion': '10.13',
@@ -146,12 +148,12 @@ if MAC:
             # Without this macOS kills the app the moment bleak touches
             # CoreBluetooth.
             'NSBluetoothAlwaysUsageDescription':
-                'HEXR Window Tester uses Bluetooth to connect to your HEXR gloves.',
+                'HEXR Companion uses Bluetooth to connect to your HEXR gloves.',
             # macOS asks before an app may reach devices on the local network,
             # and shows this when it does: the Headsets screen finds and talks
             # to HEXR headsets on the same Wi-Fi.
             'NSLocalNetworkUsageDescription':
-                'HEXR Window Tester finds and controls HEXR headsets on your local network.',
+                'HEXR Companion finds and controls HEXR headsets on your local network.',
             # Bundled IBM Plex faces, if present, are registered by macOS itself.
             'ATSApplicationFontsPath': 'assets/fonts/',
         },

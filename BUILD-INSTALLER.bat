@@ -1,10 +1,10 @@
 @echo off
 REM ============================================================================
-REM  HEXR Window Tester - build the installer.  Double-click this file.
+REM  HEXR Companion - build the installer.  Double-click this file.
 REM
 REM  Produces exactly one thing to hand out:
 REM
-REM      Installer\HexR-Window-Tester-Setup.exe
+REM      Installer\HexR-Companion-Setup.exe
 REM
 REM  That file is self-contained. The laptop it runs on needs nothing else -
 REM  no Python, no developer tools, no Bluetooth driver.
@@ -19,11 +19,11 @@ REM  "install it, then look for it again" simply does not work inside one.
 REM ============================================================================
 setlocal EnableExtensions
 cd /d "%~dp0"
-title Building the HEXR Window Tester installer
+title Building the HEXR Companion installer
 
 echo.
 echo  ======================================================
-echo   Building the HEXR Window Tester installer
+echo   Building the HEXR Companion installer
 echo  ======================================================
 echo.
 
@@ -66,7 +66,7 @@ if errorlevel 1 goto :fail
 
 REM --- 3. The app -------------------------------------------------------------
 echo  [3/5] Building the app. This is the slow part, around a minute...
-%PY% -m PyInstaller --noconfirm --clean HexR-Window-Tester.spec
+%PY% -m PyInstaller --noconfirm --clean HexR-Companion.spec
 if errorlevel 1 goto :app_failed
 
 REM --- 4. Inno Setup ----------------------------------------------------------
@@ -97,7 +97,7 @@ goto :fail
 
 :have_iscc
 echo  [4/5] Packaging the installer...
-"%ISCC%" /Q "packaging\HexR-Window-Tester.iss"
+"%ISCC%" /Q "packaging\HexR-Companion.iss"
 if errorlevel 1 goto :pack_failed
 
 REM --- 5. Portable copy -------------------------------------------------------
@@ -105,19 +105,19 @@ REM Kept out of Installer\ on purpose. That folder is what gets handed to
 REM someone, and it should hold one file with one obvious name. The zip is for
 REM locked-down machines that cannot run an installer at all.
 echo  [5/5] Zipping a portable copy for locked-down machines...
-powershell -NoProfile -Command "Compress-Archive -Path 'dist\HexR-Window-Tester\*' -DestinationPath 'dist\HexR-Window-Tester-portable.zip' -Force"
+powershell -NoProfile -Command "Compress-Archive -Path 'dist\HexR-Companion\*' -DestinationPath 'dist\HexR-Companion-portable.zip' -Force"
 
 echo.
 echo  ======================================================
 echo   Done.
 echo.
 echo   Send people this one file:
-echo       Installer\HexR-Window-Tester-Setup.exe
+echo       Installer\HexR-Companion-Setup.exe
 echo.
-echo   They double-click it and get a HEXR Window Tester icon
+echo   They double-click it and get a HEXR Companion icon
 echo   on their desktop. Nothing else to install.
 echo.
-echo   dist\HexR-Window-Tester-portable.zip is the no-install
+echo   dist\HexR-Companion-portable.zip is the no-install
 echo   copy, for machines that block installers.
 echo  ======================================================
 echo.

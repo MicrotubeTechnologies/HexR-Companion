@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the macOS installer: dist/HexR-Window-Tester-Mac.pkg
+# Build the macOS installer: dist/HexR-Companion-Mac.pkg
 #
 #     tools/build_mac.sh                # build, sign, notarize the installer
 #     tools/build_mac.sh --no-notarize  # skip Apple notarization (local testing only)
@@ -22,9 +22,9 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-APP_NAME="HEXR Window Tester"
+APP_NAME="HEXR Companion"
 APP="dist/$APP_NAME.app"
-PKG="dist/HexR-Window-Tester-Mac.pkg"
+PKG="dist/HexR-Companion-Mac.pkg"
 ENTITLEMENTS="packaging/macos/entitlements.plist"
 NOTARY_PROFILE="${NOTARY_PROFILE:-hexr-notary}"
 VENV=".venv-mac"
@@ -76,9 +76,9 @@ iconutil -c icns "$ICONSET" -o assets/icon.icns
 # -------------------------------------------------------------- build
 step "Building $APP"
 rm -rf build "dist/$APP_NAME" "$APP"
-"$VENV/bin/pyinstaller" --noconfirm --log-level WARN HexR-Window-Tester.spec
+"$VENV/bin/pyinstaller" --noconfirm --log-level WARN HexR-Companion.spec
 [[ -d "$APP" ]] || die "PyInstaller did not produce $APP"
-lipo -archs "$APP/Contents/MacOS/HexR-Window-Tester"
+lipo -archs "$APP/Contents/MacOS/HexR-Companion"
 
 # -------------------------------------------------------------- sign
 if [[ -z "${SIGN_IDENTITY:-}" ]]; then
@@ -126,6 +126,8 @@ sed "s/@VERSION@/$VERSION/" packaging/macos/distribution.xml > "$WORK/distributi
 # installing into /Applications.
 pkgbuild --analyze --root "$WORK/root" "$WORK/component.plist" >/dev/null
 /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$WORK/component.plist"
+# The id is the one from when the app was HEXR Window Tester, as in the spec: a
+# new one would make macOS treat it as another app and ask for Bluetooth again.
 pkgbuild --quiet --root "$WORK/root" --component-plist "$WORK/component.plist" \
   --identifier tech.microtube.hexr-window-tester --version "$VERSION" \
   --install-location /Applications "$WORK/app.pkg"

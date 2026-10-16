@@ -3,7 +3,8 @@
 At an event a facilitator would otherwise have to take a headset off someone to connect their
 gloves, and could not see what they were seeing. This lists every headset running a HEXR app
 with HexR Remote, and for the one picked: its gloves (connect, disconnect, battery, pressure),
-its scene, the app's own commands, and its view once the wearer agrees to share it.
+recentering the wearer, its scene, the app's own commands, and its view once the wearer agrees
+to share it.
 
 The same thing as the phone's Headsets tab, over the same protocol (see hexr/remote.py).
 """
@@ -16,6 +17,7 @@ import tkinter as tk
 from .. import remote as R
 from .. import theme as T
 from ..headsets import Headsets, HeadsetRow
+from ..i18n import N_, tr
 from ..widgets import Button, Divider, Dot, Panel, Select, Surface
 from .base import Screen, section_label
 
@@ -28,9 +30,9 @@ LIST_EVERY = 4            # ticks between list refreshes: 20 Hz / 4 = 5 Hz, what
 
 
 class HeadsetsScreen(Screen):
-    title_text = "Headsets"
-    sub_text = ("Every HEXR headset on this network. Connect its gloves, change its scene and "
-                "watch what the wearer sees, without taking the headset off them.")
+    title_text = N_("Headsets")
+    sub_text = N_("Every HEXR headset on this network. Connect its gloves, change its scene and "
+                  "watch what the wearer sees, without taking the headset off them.")
 
     def __init__(self, parent, app):
         super().__init__(parent, app)
@@ -45,13 +47,13 @@ class HeadsetsScreen(Screen):
         self.listen_status = tk.Label(bar, text="", bg=T.SURFACE, fg=T.TEXT_MUTED,
                                       font=T.font(12.5), anchor="w")
         self.listen_status.pack(side="left")
-        Button(bar, "Add", command=self._add, height=30, fill=T.INSET, fg=T.TEXT,
+        Button(bar, tr("Add"), command=self._add, height=30, fill=T.INSET, fg=T.TEXT,
                border=T.BORDER, hover_fill=T.ACCENT, hover_fg=T.CANVAS,
                hover_border=T.ACCENT, min_width=70).pack(side="right")
         self.address = _entry(bar, width=18)
         self.address.pack(side="right", padx=(0, 8), ipady=4)
         self.address.bind("<Return>", lambda e: self._add())
-        tk.Label(bar, text="Headset address", bg=T.SURFACE, fg=T.TEXT_FAINT,
+        tk.Label(bar, text=tr("Headset address"), bg=T.SURFACE, fg=T.TEXT_FAINT,
                  font=T.font(12)).pack(side="right", padx=(0, 8))
 
         self.results = Surface(self.body)
@@ -60,11 +62,11 @@ class HeadsetsScreen(Screen):
         self.empty = tk.Label(
             self.results, bg=T.RAISED, fg=T.TEXT_MUTED, font=T.font(12.5), justify="left",
             anchor="w", wraplength=820,
-            text=("No headsets yet. Each one needs a HEXR app with HexR Remote running, on the "
-                  "same network as this computer. If one is running and still does not appear, "
-                  "Windows may be blocking it: allow HEXR Window Tester on private networks in "
-                  "Windows Security, make sure this network is set to Private, or type the "
-                  "headset's address above."))
+            text=tr("No headsets yet. Each one needs a HEXR app with HexR Remote running, on "
+                    "the same network as this computer. If one is running and still does not "
+                    "appear, Windows may be blocking it: allow HEXR Companion on private networks "
+                    "in Windows Security, make sure this network is set to Private, or type the "
+                    "headset's address above."))
         self.empty.pack(fill="x", padx=18, pady=18)
 
         self.detail_host = tk.Frame(self.body, bg=T.SURFACE)
@@ -76,7 +78,7 @@ class HeadsetsScreen(Screen):
         head = tk.Frame(self.results, bg=T.RAISED)
         head.pack(fill="x", padx=18, pady=(14, 0))
         for i, (label, width) in enumerate(
-                zip(("Headset", "App · scene", "Gloves", "State", ""), COLS)):
+                zip((tr("Headset"), tr("App · scene"), tr("Gloves"), tr("State"), ""), COLS)):
             section_label(head, label, bg=T.RAISED).grid(row=0, column=i, sticky="w",
                                                          padx=(0, 10))
             if width:
@@ -116,15 +118,15 @@ class HeadsetsScreen(Screen):
         gloves.grid(row=0, column=2, sticky="w", padx=(0, 10))
         row.glove_dots = {}
         for hand in R.HANDS:
-            tk.Label(gloves, text=hand[0].upper(), bg=T.RAISED, fg=T.TEXT_FAINT,
-                     font=T.mono(11)).pack(side="left", padx=(0, 3))
+            tk.Label(gloves, text=tr("L") if hand == "left" else tr("R"), bg=T.RAISED,
+                     fg=T.TEXT_FAINT, font=T.mono(11)).pack(side="left", padx=(0, 3))
             dot = Dot(gloves, color=T.DOT_OFF, bg=T.RAISED)
             dot.pack(side="left", padx=(0, 10), pady=(3, 0))
             row.glove_dots[hand] = dot
         row.state = tk.Label(row, text="", bg=T.RAISED, fg=T.TEXT_MUTED, font=T.font(12),
                              anchor="w")
         row.state.grid(row=0, column=3, sticky="w", padx=(0, 10))
-        row.open = Button(row, "Open", command=lambda k=r.key: self._select(k), height=30,
+        row.open = Button(row, tr("Open"), command=lambda k=r.key: self._select(k), height=30,
                           fill=T.INSET, fg=T.TEXT, border=T.BORDER, hover_fill=T.ACCENT,
                           hover_fg=T.CANVAS, hover_border=T.ACCENT, min_width=90)
         row.open.grid(row=0, column=4, sticky="e")
@@ -180,9 +182,10 @@ class HeadsetsScreen(Screen):
         elif rows:
             n = len(rows)
             self.listen_status.configure(
-                text=f"{n} headset{'' if n == 1 else 's'} on this network", fg=T.SUCCESS)
+                text=tr("1 headset on this network") if n == 1 else
+                tr("{n} headsets on this network", n=n), fg=T.SUCCESS)
         else:
-            self.listen_status.configure(text="Listening for headsets…", fg=T.TEXT_MUTED)
+            self.listen_status.configure(text=tr("Listening for headsets…"), fg=T.TEXT_MUTED)
         self._sync_list(rows)
 
         row = next((r for r in rows if r.key == self._selected), None)
@@ -199,7 +202,7 @@ class HeadsetsScreen(Screen):
 
 
 class _Detail(tk.Frame):
-    """The picked headset: gloves, scene, commands and view."""
+    """The picked headset: gloves, scene, commands, recenter and view."""
 
     def __init__(self, parent, model: Headsets, key: str, app):
         super().__init__(parent, bg=T.SURFACE)
@@ -217,16 +220,16 @@ class _Detail(tk.Frame):
         self.title = tk.Label(head, text="", bg=T.SURFACE, fg=T.TEXT, font=T.font(17, 600),
                               anchor="w")
         self.title.pack(side="left")
-        self.forget_btn = Button(head, "Forget", command=self._forget, height=30, fill=T.INSET,
+        self.forget_btn = Button(head, tr("Forget"), command=self._forget, height=30, fill=T.INSET,
                                  fg=T.TEXT_2, border=T.BORDER, hover_fill=T.INSET,
                                  hover_fg=T.DANGER, hover_border=T.DANGER, min_width=80)
-        Button(head, "Save name", command=self._rename, height=30, fill=T.INSET, fg=T.TEXT,
+        Button(head, tr("Save name"), command=self._rename, height=30, fill=T.INSET, fg=T.TEXT,
                border=T.BORDER, hover_fill=T.ACCENT, hover_fg=T.CANVAS,
                hover_border=T.ACCENT, min_width=100).pack(side="right")
         self.nick = _entry(head, width=16)
         self.nick.pack(side="right", padx=(0, 8), ipady=4)
         self.nick.bind("<Return>", lambda e: self._rename())
-        tk.Label(head, text="Name", bg=T.SURFACE, fg=T.TEXT_FAINT,
+        tk.Label(head, text=tr("Name"), bg=T.SURFACE, fg=T.TEXT_FAINT,
                  font=T.font(12)).pack(side="right", padx=(0, 8))
         self._nick_shown = None
 
@@ -238,11 +241,11 @@ class _Detail(tk.Frame):
         self.notice.pack(fill="x", pady=(8, 0))
 
         # -- gloves
-        section_label(self, "Gloves, through the headset").pack(fill="x", pady=(18, 8))
+        section_label(self, tr("Gloves, through the headset")).pack(fill="x", pady=(18, 8))
         gloves = tk.Frame(self, bg=T.SURFACE)
         gloves.pack(fill="x")
         self.cards = {hand: self._glove_card(gloves, hand) for hand in R.HANDS}
-        Button(gloves, "Release all", command=lambda: model.release(key), height=34,
+        Button(gloves, tr("Release all"), command=lambda: model.release(key), height=34,
                fill=T.INSET, fg=T.TEXT_2, border=T.BORDER, hover_fill=T.INSET,
                hover_fg=T.ACCENT, hover_border=T.ACCENT, min_width=120).pack(
             side="left", anchor="n")
@@ -252,18 +255,33 @@ class _Detail(tk.Frame):
         slot = tk.Frame(self, bg=T.SURFACE)
         slot.pack(fill="x")
         self.scene_row = tk.Frame(slot, bg=T.SURFACE)
-        section_label(self.scene_row, "Scene").pack(fill="x", pady=(18, 8))
+        section_label(self.scene_row, tr("Scene")).pack(fill="x", pady=(18, 8))
         self.scene_select = Select(self.scene_row, [""], value="", command=self._scene_picked)
         self.scene_select.pack(anchor="w")
         self._picked_at = 0.0
         self.commands = tk.Frame(slot, bg=T.SURFACE)
         self.commands.pack(fill="x", pady=(10, 0))
 
+        # -- wearer, beside the view: recentering is what someone watching it reaches for
+        section_label(self, tr("Wearer")).pack(fill="x", pady=(18, 8))
+        wbar = tk.Frame(self, bg=T.SURFACE)
+        wbar.pack(fill="x")
+        self.recenter_btn = Button(wbar, tr("Recenter"), command=self._recenter, height=34,
+                                   fill=T.INSET, fg=T.TEXT, border=T.BORDER,
+                                   hover_fill=T.ACCENT, hover_fg=T.CANVAS,
+                                   hover_border=T.ACCENT, min_width=120)
+        self.recenter_btn.pack(side="left")
+        self.recenter_status = tk.Label(wbar, text="", bg=T.SURFACE, fg=T.TEXT_MUTED,
+                                        font=T.font(12.5), anchor="w", justify="left",
+                                        wraplength=640)
+        self.recenter_status.pack(side="left", padx=(14, 0))
+        self._recentered_at = 0.0
+
         # -- view
-        section_label(self, "View").pack(fill="x", pady=(18, 8))
+        section_label(self, tr("View")).pack(fill="x", pady=(18, 8))
         vbar = tk.Frame(self, bg=T.SURFACE)
         vbar.pack(fill="x")
-        self.view_btn = Button(vbar, "Watch", command=self._toggle_view, glyph="▶",
+        self.view_btn = Button(vbar, tr("Watch"), command=self._toggle_view, glyph="▶",
                                min_width=150)
         self.view_btn.pack(side="left")
         self.view_status = tk.Label(vbar, text="", bg=T.SURFACE, fg=T.TEXT_MUTED,
@@ -284,7 +302,8 @@ class _Detail(tk.Frame):
         top.pack(fill="x")
         card.dot = Dot(top, color=T.DOT_OFF, bg=T.RAISED)
         card.dot.pack(side="left", pady=(5, 0))
-        tk.Label(top, text=f"{hand.capitalize()} glove", bg=T.RAISED, fg=T.TEXT,
+        tk.Label(top, text=tr("{hand} glove", hand=tr(hand.capitalize())), bg=T.RAISED,
+                 fg=T.TEXT,
                  font=T.font(14, 600)).pack(side="left", padx=(9, 0))
         # A fixed width in characters keeps both cards the same size, and wrapping inside it
         # rather than past it keeps a long status from being cut off.
@@ -294,7 +313,7 @@ class _Detail(tk.Frame):
         card.numbers = tk.Label(b, text="", bg=T.RAISED, fg=T.TEXT_2, font=T.mono(11),
                                 anchor="w", justify="left")
         card.numbers.pack(fill="x", pady=(4, 0))
-        card.btn = Button(b, "Connect", command=lambda h=hand: self._glove_clicked(h),
+        card.btn = Button(b, tr("Connect"), command=lambda h=hand: self._glove_clicked(h),
                           height=30, fill=T.INSET, fg=T.TEXT, border=T.BORDER,
                           hover_fill=T.ACCENT, hover_fg=T.CANVAS, hover_border=T.ACCENT,
                           min_width=200)
@@ -320,26 +339,28 @@ class _Detail(tk.Frame):
             bits.append(f"{s.app} {s.app_version}".strip())
             bits.append(f"HexR {s.hexr_version}")
             if s.headset_battery_pct >= 0:
-                bits.append(f"headset {s.headset_battery_pct}%")
+                bits.append(tr("headset {pct}%", pct=s.headset_battery_pct))
             if s.controllers > 1:
-                bits.append(f"{s.controllers} controllers")
+                bits.append(tr("{n} controllers", n=s.controllers))
         bits.append(r.host)
         self.info.configure(text="   ·   ".join(b for b in bits if b))
 
         if r.error:
             self.notice.configure(text=r.error, fg=T.DANGER)
         elif r.link != "connected":
-            self.notice.configure(text="Not connected to this headset. Trying again…",
+            self.notice.configure(text=tr("Not connected to this headset. Trying again…"),
                                   fg=T.TEXT_MUTED)
         elif s and s.paused:
             self.notice.configure(
-                text=("Nobody is wearing this headset, so it is asleep and refuses commands. "
-                      "Someone has to put it on first."), fg=T.ACCENT)
+                text=tr("Nobody is wearing this headset, so it is asleep and refuses commands. "
+                        "Someone has to put it on first."), fg=T.ACCENT)
         else:
             self.notice.configure(text="")
 
         for hand, card in self.cards.items():
             self._update_card(card, s.gloves.get(hand) if s else None, s)
+
+        self._update_recenter(r)
 
         if s and s.expose_scenes and s.scenes:
             if not self.scene_row.winfo_ismapped():
@@ -385,14 +406,17 @@ class _Detail(tk.Frame):
             card.state.configure(text="—", fg=T.TEXT_MUTED)
             card.numbers.configure(text="")
         else:
-            word = {"connected": "Connected", "connecting": "Connecting…",
-                    "disconnected": "Not connected", "missing": "No glove handler in this app"
-                    }.get(g.state, g.state)
-            text = word + (f"\n{g.message}" if g.message and g.message != word else "")
+            english = {"connected": N_("Connected"), "connecting": N_("Connecting…"),
+                       "disconnected": N_("Not connected"),
+                       "missing": N_("No glove handler in this app")}.get(g.state, g.state)
+            word = tr(english)
+            # The headset's own message, unless it only says the same thing in English.
+            extra = g.message and g.message not in (word, english)
+            text = word + (f"\n{g.message}" if extra else "")
             card.state.configure(text=text, fg=T.SUCCESS if g.connected else T.TEXT_MUTED)
             numbers = []
             if g.battery_pct >= 0:
-                numbers.append(f"battery {g.battery_pct}%")
+                numbers.append(tr("battery {level}", level=f"{g.battery_pct}%"))
             if g.connected and len(g.pressure_kpa) >= 7:
                 numbers.append("kPa " + " ".join(f"{p:.0f}" for p in g.pressure_kpa[:6]) +
                                f"  src {g.pressure_kpa[6]:.0f}")
@@ -402,8 +426,8 @@ class _Detail(tk.Frame):
             card.numbers.configure(text="\n".join(numbers))
         connected = bool(g and g.connected)
         usable = bool(s and s.allow_glove_control and not s.paused and g and g.state != "missing")
-        text = ("Disconnect" if connected else
-                "Connecting…" if g and g.state == "connecting" else "Connect")
+        text = (tr("Disconnect") if connected else
+                tr("Connecting…") if g and g.state == "connecting" else tr("Connect"))
         look = (text, usable, connected)
         if look != card.look:
             card.look = look
@@ -413,7 +437,27 @@ class _Detail(tk.Frame):
                          hover_fill=T.INSET if connected else T.ACCENT,
                          hover_border=T.DANGER if connected else T.ACCENT)
 
+    def _update_recenter(self, r: HeadsetRow):
+        s = r.status
+        if s and not s.allow_recenter:
+            text, colour = tr("This app cannot be recentered from here: it needs HexR 0.11.0 "
+                              "or newer, with Allow Recenter on."), T.TEXT_MUTED
+        elif time.monotonic() - self._recentered_at < 3.0 and not r.error:
+            # The headset only answers a request it could not do, so quiet means done.
+            text, colour = tr("Recentered."), T.SUCCESS
+        else:
+            text, colour = tr("Puts the wearer back on the scene's starting spot, facing "
+                              "its front."), T.TEXT_MUTED
+        self.recenter_status.configure(text=text, fg=colour)
+        usable = bool(s and r.link == "connected" and s.allow_recenter and not s.paused)
+        if self.recenter_btn.disabled == usable:
+            self.recenter_btn.set(disabled=not usable)
+
     # -- actions -----------------------------------------------------------------
+
+    def _recenter(self):
+        self._recentered_at = time.monotonic()
+        self.model.recenter(self.key)
 
     def _glove_clicked(self, hand: str):
         card = self.cards[hand]
@@ -456,15 +500,15 @@ class _Detail(tk.Frame):
 
     def _update_view(self, r: HeadsetRow):
         if self._unavailable:
-            self.view_btn.set(text="Watch", disabled=True)
+            self.view_btn.set(text=tr("Watch"), disabled=True)
             self.view_status.configure(text=self._unavailable, fg=T.TEXT_MUTED)
             return
         s = r.status
         st = s.stream if s else R.StreamState()
         self._last_stream = st
         if s and not s.allow_video:
-            self.view_btn.set(text="Watch", disabled=True)
-            self.view_status.configure(text="This app does not share its view.",
+            self.view_btn.set(text=tr("Watch"), disabled=True)
+            self.view_status.configure(text=tr("This app does not share its view."),
                                        fg=T.TEXT_MUTED)
             return
 
@@ -476,32 +520,33 @@ class _Detail(tk.Frame):
         if not live and self.video is not None and st.state != "requesting":
             self._stop_video()
         if self._view_wanted or self.video:
-            self.view_btn.set(text="Stop watching", glyph="■", disabled=False,
+            self.view_btn.set(text=tr("Stop watching"), glyph="■", disabled=False,
                               fill=T.INSET, fg=T.DANGER, border=T.DANGER,
                               hover_fill=T.INSET, hover_fg=T.DANGER, hover_border=T.DANGER)
         else:
-            self.view_btn.set(text="Watch" if not live else "Watch (shared now)", glyph="▶",
+            self.view_btn.set(text=tr("Watch") if not live else tr("Watch (shared now)"),
+                              glyph="▶",
                               disabled=bool(s and s.paused and not live), fill=T.ACCENT,
                               fg=T.CANVAS, border=T.ACCENT, hover_fill=T.ACCENT_HOVER,
                               hover_fg=T.CANVAS, hover_border=T.ACCENT_HOVER)
 
         text, colour = {
-            "off": ("Not shared. Watch asks the wearer to allow it in the headset.",
+            "off": (tr("Not shared. Watch asks the wearer to allow it in the headset."),
                     T.TEXT_MUTED),
-            "requesting": ("Waiting for the wearer to allow screen sharing in the headset…",
+            "requesting": (tr("Waiting for the wearer to allow screen sharing in the headset…"),
                            T.ACCENT),
-            "live": (f"Shared · {st.width}×{st.height}" +
-                     (f" · {st.viewers} watching" if st.viewers else ""), T.SUCCESS),
-            "denied": ("The wearer said no. Watch asks again.", T.DANGER),
-            "unsupported": ("This headset cannot share its view.", T.TEXT_MUTED),
-            "error": ("Sharing failed.", T.DANGER),
+            "live": (tr("Shared · {w}×{h}", w=st.width, h=st.height) +
+                     (tr(" · {n} watching", n=st.viewers) if st.viewers else ""), T.SUCCESS),
+            "denied": (tr("The wearer said no. Watch asks again."), T.DANGER),
+            "unsupported": (tr("This headset cannot share its view."), T.TEXT_MUTED),
+            "error": (tr("Sharing failed."), T.DANGER),
         }.get(st.state, (st.state, T.TEXT_MUTED))
         if st.message and st.state in ("error", "denied", "unsupported"):
             text = f"{text} {st.message}"
         if self.video and self.video.state == "failed":
             text, colour = self.video.message, T.DANGER
         elif self.video and self.video.state == "connecting":
-            text = "Connecting to the view…"
+            text = tr("Connecting to the view…")
         self.view_status.configure(text=text, fg=colour)
         if st.state == "denied" and self._view_wanted:
             self._view_wanted = False
@@ -547,10 +592,11 @@ def _app_line(r: HeadsetRow) -> str:
 
 def _link_look(r: HeadsetRow) -> tuple[str, str]:
     if r.link != "connected":
-        return (T.ACCENT, "connecting") if r.link == "connecting" else (T.DANGER, "unreachable")
+        return ((T.ACCENT, tr("connecting")) if r.link == "connecting" else
+                (T.DANGER, tr("unreachable")))
     if r.status and r.status.paused:
-        return T.DOT_OFF, "asleep"
-    return T.SUCCESS, "ready"
+        return T.DOT_OFF, tr("asleep")
+    return T.SUCCESS, tr("ready")
 
 
 def _glove_colour(g: R.GloveState | None) -> str:
@@ -566,5 +612,5 @@ def _this_computer_holds(app, g: R.GloveState) -> str:
         return ""
     state = app.state.get(g.hand.capitalize()) if hasattr(app, "state") else None
     if state is not None and getattr(state, "connected", False):
-        return "This computer has a glove for this hand; disconnect it here first."
+        return tr("This computer has a glove for this hand; disconnect it here first.")
     return ""

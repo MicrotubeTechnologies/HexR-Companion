@@ -25,7 +25,9 @@ import os
 import sys
 import tkinter as tk
 
+from . import i18n
 from . import theme as T
+from .i18n import N_, tr
 from .widgets import (Button, GlovesButton, IconButton, NavRow, StatusPill,
                       paint_maximise, paint_restore)
 
@@ -36,7 +38,7 @@ MAC = sys.platform == "darwin"
 # the way to testing a glove, so they live under Test rather than beside it:
 # Test is the scan until a glove connects, and then the header carries a Quick
 # test button and a Gloves button that open them as panels.
-STEPS = [("01", "Test", "test"), ("02", "Headsets", "headsets")]
+STEPS = [("01", N_("Test"), "test"), ("02", N_("Headsets"), "headsets")]
 
 # Screens that belong to a rail entry without being it.
 NAV_OF = {"connect": "test", "quicktest": "test"}
@@ -54,13 +56,15 @@ def _hwnd_of(widget) -> int:
 
 
 class Shell:
-    def __init__(self, root: tk.Tk, on_nav=None, on_quick_test=None, on_gloves=None):
+    def __init__(self, root: tk.Tk, on_nav=None, on_quick_test=None, on_gloves=None,
+                 on_language=None):
         self.root = root
         # A rail click goes through the app, which knows whether Test is the
         # scan or the controls right now.
         self.on_nav = on_nav
         self.on_quick_test = on_quick_test
         self.on_gloves = on_gloves
+        self.on_language = on_language
         self.screen = "test"
         self._screens: dict[str, tk.Frame] = {}
         self._actions_shown = False
@@ -82,11 +86,24 @@ class Shell:
         root.update_idletasks()
         self._centre()
         self._apply_win32()
+        self._build()
 
+    def _build(self):
         if not MAC:
             self._build_titlebar()
         self._build_header()
         self._build_body()
+
+    def rebuild(self):
+        """Every piece of chrome again, in the language now picked. The window
+        itself stays where and how it is; the app re-registers its screens."""
+        for w in self.root.winfo_children():
+            w.destroy()
+        self._screens.clear()
+        self._actions_shown = False
+        self._build()
+        if self.maximised and not MAC:
+            self.max_btn.set_painter(paint_restore)
 
     # -- window plumbing -----------------------------------------------------
 
@@ -266,7 +283,7 @@ class Shell:
             from .widgets import draw_round
             draw_round(mark, 0, 0, 11, 11, 3, T.ACCENT)
             mark.pack(side="left")
-        tk.Label(left, text="HEXR Window Tester", bg=T.RAISED, fg=T.TEXT_2,
+        tk.Label(left, text="HEXR Companion", bg=T.RAISED, fg=T.TEXT_2,
                  font=T.font(12.5)).pack(side="left", padx=(9, 0))
 
         right = tk.Frame(bar, bg=T.RAISED)
@@ -325,9 +342,9 @@ class Shell:
         word.pack(anchor="w")
         tk.Label(word, text="HEXR", bg=T.SURFACE, fg=T.ACCENT,
                  font=T.font(20, 700)).pack(side="left")
-        tk.Label(word, text=" Window Tester", bg=T.SURFACE, fg=T.TEXT,
+        tk.Label(word, text=" Companion", bg=T.SURFACE, fg=T.TEXT,
                  font=T.font(20, 400)).pack(side="left")
-        tk.Label(mark, text="by Microtube Technologies", bg=T.SURFACE,
+        tk.Label(mark, text=tr("by Microtube Technologies"), bg=T.SURFACE,
                  fg=T.TEXT_FAINT, font=T.font(10)).pack(anchor="w")
 
         right = tk.Frame(h, bg=T.SURFACE)
@@ -340,7 +357,7 @@ class Shell:
         self.actions = tk.Frame(right, bg=T.SURFACE)
         self.gloves_btn = GlovesButton(self.actions, command=self._gloves_clicked)
         self.gloves_btn.pack(side="right")
-        Button(self.actions, "Quick test", command=self._quick_test_clicked,
+        Button(self.actions, tr("Quick test"), command=self._quick_test_clicked,
                height=34, fill=T.RAISED, fg=T.TEXT, border=T.BORDER,
                hover_fill=T.INSET, hover_fg=T.ACCENT, hover_border=T.ACCENT,
                padx=18, font=T.font(13, 600)).pack(side="right", padx=(0, 10))
@@ -366,22 +383,23 @@ class Shell:
         top.pack(fill="x", pady=(14, 0), padx=10)
         self.nav: dict[str, NavRow] = {}
         for num, label, key in STEPS:
-            row = NavRow(top, num, label, command=lambda k=key: self._nav_clicked(k))
+            row = NavRow(top, num, tr(label), command=lambda k=key: self._nav_clicked(k))
             row.pack(fill="x", pady=1)
             self.nav[key] = row
 
         foot = tk.Frame(rail, bg=T.RAIL)
         foot.pack(side="bottom", fill="x", padx=22, pady=(0, 14))
+        self._build_language(foot)
         tk.Frame(foot, bg=T.BORDER_SOFT, height=1).pack(fill="x", pady=(0, 6))
         # Read from the VERSION file rather than a literal, so the footer, the
         # exe's properties and the installer can never disagree. The glove
         # reports no firmware version over BLE, so there is nothing else to
         # show here — an empty "fw —" slot would only invite the question.
-        self.build_label = tk.Label(foot, text=f"app {T.app_version()}",
+        self.build_label = tk.Label(foot, text=tr("app {version}", version=T.app_version()),
                                     bg=T.RAIL,
                                     fg=T.TEXT_OFF, font=T.mono(10.5), anchor="w")
         self.build_label.pack(fill="x", pady=(0, 7))
-        help_lbl = tk.Label(foot, text="Help & docs", bg=T.RAIL, fg=T.TEXT_MUTED,
+        help_lbl = tk.Label(foot, text=tr("Help & docs"), bg=T.RAIL, fg=T.TEXT_MUTED,
                             font=T.font(12), anchor="w", cursor="hand2")
         help_lbl.pack(fill="x")
         help_lbl.bind("<Enter>", lambda e: help_lbl.configure(fg=T.TEXT))
@@ -393,6 +411,29 @@ class Shell:
         self.content.pack(side="left", fill="both", expand=True)
 
         self.root.after(40, lambda: [r.render() for r in self.nav.values()])
+
+    def _build_language(self, parent):
+        """English | 中文, each word in its own script so either can be read
+        whichever is on. Picking the other one rebuilds the window in it."""
+        box = tk.Frame(parent, bg=T.BORDER)
+        box.pack(anchor="w", pady=(0, 12))
+        current = i18n.language()
+        for i, (code, name) in enumerate(i18n.LANGUAGES):
+            on = code == current
+            font = T.cjk(12, 600 if on else 400) if code == "zh" else                 T.font(12, 600 if on else 400)
+            lbl = tk.Label(box, text=name, bg=T.INSET if on else T.RAIL,
+                           fg=T.TEXT if on else T.TEXT_MUTED, font=font,
+                           padx=12, pady=3, cursor="arrow" if on else "hand2")
+            lbl.pack(side="left", padx=(1 if i == 0 else 0, 1), pady=1)
+            if not on:
+                lbl.bind("<Enter>", lambda e, w=lbl: w.configure(fg=T.ACCENT))
+                lbl.bind("<Leave>", lambda e, w=lbl: w.configure(fg=T.TEXT_MUTED))
+                lbl.bind("<Button-1>", lambda e, c=code: self._language_clicked(c))
+
+    def _language_clicked(self, code: str):
+        # After the click has finished with the label it is about to destroy.
+        if self.on_language:
+            self.root.after(0, lambda: self.on_language(code))
 
     # -- screens -------------------------------------------------------------
 

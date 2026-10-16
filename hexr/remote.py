@@ -24,11 +24,13 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from .i18n import tr
+
 DISCOVERY_PORT = 47800
 CONTROL_PORT = 47801
 VIDEO_PORT = 47802
 PROTOCOL = 1
-CLIENT = "HexR Window Tester"
+CLIENT = "HexR Companion"
 
 # A headset sends its status five times a second, and once a second even while asleep, so this
 # much silence means it has gone. It drops a client it has not heard from in 15 s; the ping
@@ -75,6 +77,10 @@ def command(command_id: str) -> str:
 
 def stream(action: str) -> str:
     return _line({"type": "stream", "action": action})
+
+
+def recenter() -> str:
+    return _line({"type": "recenter"})
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +144,7 @@ class Status:
     allow_glove_control: bool
     allow_video: bool
     expose_scenes: bool
+    allow_recenter: bool
     controllers: int
 
 
@@ -210,6 +217,8 @@ def parse_status(obj: dict) -> Status:
         allow_glove_control=bool(obj.get("allowGloveControl", True)),
         allow_video=bool(obj.get("allowVideo", True)),
         expose_scenes=bool(obj.get("exposeScenes", True)),
+        # Missing before HexR 0.11.0, which does not know the request either.
+        allow_recenter=bool(obj.get("allowRecenter", False)),
         controllers=_int(obj.get("controllers"), 0),
     )
 
@@ -286,7 +295,8 @@ class Discovery:
             sock.settimeout(1.0)
         except OSError as e:
             if self._on_error:
-                self._on_error(f"Cannot listen for headsets on UDP {self._port}: {e}")
+                self._on_error(tr("Cannot listen for headsets on UDP {port}: {error}",
+                                  port=self._port, error=e))
             return
         with sock:
             while not self._stop.is_set():
@@ -473,7 +483,7 @@ def video_available() -> str | None:
     try:
         import av  # noqa: F401
     except ImportError:
-        return "This build cannot show a headset's view: it was made without PyAV."
+        return tr("This build cannot show a headset's view: it was made without PyAV.")
     return None
 
 
@@ -521,7 +531,8 @@ class VideoReceiver:
         try:
             sock = socket.create_connection((self.host, self.port), timeout=5.0)
         except OSError as e:
-            self.state, self.message = "failed", f"Could not reach the view: {e}"
+            self.state, self.message = "failed", tr("Could not reach the view: {error}",
+                                                    error=e)
             return
         self._sock = sock
         try:
@@ -541,9 +552,11 @@ class VideoReceiver:
             if self._stop.is_set() or isinstance(e, EOFError):
                 self.state, self.message = "ended", ""
             else:
-                self.state, self.message = "failed", f"The view stopped: {e}"
+                self.state, self.message = "failed", tr("The view stopped: {error}",
+                                                        error=e)
         except av.error.FFmpegError as e:
-            self.state, self.message = "failed", f"The view could not be decoded: {e}"
+            self.state, self.message = "failed", tr("The view could not be decoded: {error}",
+                                                    error=e)
         finally:
             _close(sock)
 

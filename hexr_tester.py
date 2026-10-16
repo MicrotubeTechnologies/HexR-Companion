@@ -1,4 +1,4 @@
-"""HEXR Window Tester — entry point and the mediator that wires everything together.
+"""HEXR Companion — entry point and the mediator that wires everything together.
 
 This is a hardware test and diagnostic tool. It is not the way to build with
 HEXR: an application integrates the `com.microtube.hexr` Unity package or the
@@ -13,6 +13,7 @@ from __future__ import annotations
 import sys
 import tkinter as tk
 
+from hexr import i18n
 from hexr import theme as T
 from hexr.engine import Engine
 from hexr.headsets import Headsets
@@ -20,7 +21,8 @@ from hexr.screens.connect import ConnectScreen
 from hexr.screens.headsets import HeadsetsScreen
 from hexr.screens.quicktest import QuickTestScreen
 from hexr.screens.test import TestScreen
-from hexr.shell import Shell
+from hexr.i18n import tr
+from hexr.shell import NAV_OF, Shell
 from hexr.state import HANDS, AppState
 
 UI_HZ = 20
@@ -29,7 +31,7 @@ UI_HZ = 20
 class App:
     def __init__(self, root: tk.Tk):
         self.root = root
-        T.init(root)
+        T.init(root, cjk=i18n.language() == "zh")
 
         self.state = AppState()
         self.engine = Engine(self.state, on_change=self._engine_changed)
@@ -39,18 +41,12 @@ class App:
 
         self.shell = Shell(root, on_nav=self.navigate,
                            on_quick_test=lambda: self.open_panel("quicktest"),
-                           on_gloves=lambda: self.open_panel("connect"))
+                           on_gloves=lambda: self.open_panel("connect"),
+                           on_language=self.set_language)
         self.shell.on_close = self.shutdown
         root.protocol("WM_DELETE_WINDOW", self.shell.close)
 
-        self.screens = {
-            "connect": ConnectScreen(self.shell.content, self),
-            "test": TestScreen(self.shell.content, self),
-            "quicktest": QuickTestScreen(self.shell.content, self),
-            "headsets": HeadsetsScreen(self.shell.content, self),
-        }
-        for key, screen in self.screens.items():
-            self.shell.register(key, screen)
+        self._build_screens()
         # Gloves or Quick test, when one is open as a panel over Test.
         self.panel: str | None = None
         self.navigate("test")
@@ -61,6 +57,39 @@ class App:
         root.bind("<Escape>", lambda e: self.all_off())
 
         self._tick()
+
+    def _build_screens(self):
+        self.screens = {
+            "connect": ConnectScreen(self.shell.content, self),
+            "test": TestScreen(self.shell.content, self),
+            "quicktest": QuickTestScreen(self.shell.content, self),
+            "headsets": HeadsetsScreen(self.shell.content, self),
+        }
+        for key, screen in self.screens.items():
+            self.shell.register(key, screen)
+
+    def set_language(self, code: str):
+        """Rebuild the whole window in the other language. Only the widgets go:
+        gloves stay connected, headsets stay linked, and the Test screen's
+        choices live in AppState, so nobody has to set anything up again. A
+        scan or a quick test in progress is stopped, as closing its screen
+        would."""
+        if code == i18n.language():
+            return
+        i18n.set_language(code)
+        T.init(self.root, cjk=code == "zh")
+        where, panel = self.shell.screen, self.panel
+        headset = self.screens["headsets"]._selected
+        self.close_panel(go=False)
+        if self.engine.scanning:
+            self.engine.stop_scan()
+        self.shell.rebuild()
+        self._build_screens()
+        self.screens["headsets"]._selected = headset
+        if panel:
+            self.open_panel(panel)
+        else:
+            self.navigate(NAV_OF.get(where, where))
 
     # -- glove actions -------------------------------------------------------
 
@@ -140,7 +169,7 @@ class App:
     def _sync_status(self):
         gloves = self.state.connected_gloves()
         if not gloves:
-            self.shell.set_status(T.DOT_OFF, "no glove")
+            self.shell.set_status(T.DOT_OFF, tr("no glove"))
             return
         # A connected glove is a working glove whether or not it streams, so
         # the pill reports the connection and leaves telemetry to the places
@@ -176,7 +205,7 @@ class App:
 
 def main():
     root = tk.Tk()
-    root.title("HEXR Window Tester")
+    root.title("HEXR Companion")
     App(root)
     root.mainloop()
     return 0

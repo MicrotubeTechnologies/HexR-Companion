@@ -1,9 +1,9 @@
 @echo off
 REM ============================================================================
-REM  Run HEXR Window Tester straight from the source in this repo.
+REM  Run HEXR Companion straight from the source in this repo.
 REM
 REM  FOR DEVELOPERS. If you just want to use the app, build or download
-REM  HexR-Window-Tester-Setup.exe instead - it needs no Python at all.
+REM  HexR-Companion-Setup.exe instead - it needs no Python at all.
 REM
 REM  First run installs the two libraries the app needs; after that it launches
 REM  straight into the app window.

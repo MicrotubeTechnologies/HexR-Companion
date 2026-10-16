@@ -1,10 +1,10 @@
-; Inno Setup script for HEXR Window Tester.
+; Inno Setup script for HEXR Companion.
 ;
 ; Build it with:   BUILD-INSTALLER.bat        (from the app\ folder)
-; or by hand:      iscc packaging\HexR-Window-Tester.iss
+; or by hand:      iscc packaging\HexR-Companion.iss
 ;
-; Input : dist\HexR-Window-Tester\   (the PyInstaller folder build)
-; Output: Installer\HexR-Window-Tester-Setup.exe
+; Input : dist\HexR-Companion\   (the PyInstaller folder build)
+; Output: Installer\HexR-Companion-Setup.exe
 ;
 ; This folder is called packaging\, not installer\, because the OUTPUT folder
 ; is called Installer\. Windows filenames are case-insensitive, so two folders
@@ -19,7 +19,7 @@
 ; Get Inno Setup from https://jrsoftware.org/isdl.php (free). GitHub's
 ; windows-latest runners already have it, so CI needs no extra install.
 
-#define MyAppName        "HEXR Window Tester"
+#define MyAppName        "HEXR Companion"
 
 ; The version comes from the repo's VERSION file - the same one the app and the
 ; spec read - so an installer can never disagree with the app inside it about
@@ -34,15 +34,17 @@
   #error VERSION file is missing or empty
 #endif
 #define MyAppPublisher   "Microtube Technologies"
-#define MyAppURL         "https://github.com/MicrotubeTechnologies/HexR-Window-Tester"
-#define MyAppExeName     "HexR-Window-Tester.exe"
-#define SourceDir        AddBackslash(SourcePath) + "..\dist\HexR-Window-Tester"
+#define MyAppURL         "https://github.com/MicrotubeTechnologies/HexR-Companion"
+#define MyAppExeName     "HexR-Companion.exe"
+#define SourceDir        AddBackslash(SourcePath) + "..\dist\HexR-Companion"
 
 [Setup]
 ; AppId must never change between releases - it is how Windows recognises an
 ; upgrade rather than stacking a second entry in Add/Remove Programs. This is a
 ; NEW id, distinct from FLEXR Controller's: the two apps install side by side
-; and must never be mistaken for versions of each other.
+; and must never be mistaken for versions of each other. It is also why the
+; rename from HEXR Window Tester to HEXR Companion (0.4.0) installs as an
+; upgrade of the old app rather than beside it: the id stayed, the name moved.
 AppId={{3D7B94E1-2C58-4A6F-B0D3-7E19A4F62C88}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -57,7 +59,7 @@ VersionInfoVersion={#MyAppVersion}
 ; no UAC prompt, no "install for everyone?" question - so it also works on a
 ; locked-down laptop where the person is not an administrator.
 PrivilegesRequired=lowest
-DefaultDirName={localappdata}\Programs\HEXR Window Tester
+DefaultDirName={localappdata}\Programs\HEXR Companion
 DefaultGroupName={#MyAppName}
 UsePreviousAppDir=no
 UsePreviousGroup=no
@@ -77,7 +79,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 
 OutputDir={#SourcePath}\..\Installer
 ; This exact filename is load-bearing - see the note at the top.
-OutputBaseFilename=HexR-Window-Tester-Setup
+OutputBaseFilename=HexR-Companion-Setup
 SetupIconFile={#SourcePath}\..\assets\icon.ico
 
 ; Wizard artwork. Several sizes so Inno picks one for the user's display
@@ -120,9 +122,13 @@ Filename: "{app}\{#MyAppExeName}"; \
     Flags: nowait postinstall skipifsilent
 
 [InstallDelete]
-; The Unity app this replaces shipped as PneuClutch and was never installed by
-; an installer - it was handed over as a folder - so there is nothing of its to
-; clean up here. Listed only so the next person does not go looking.
+; Until 0.4.0 this app was HEXR Window Tester, installed under that name. The
+; AppId above is the same, so Windows already treats this as an upgrade and the
+; uninstaller entry moves over; what would be left behind is the old folder and
+; its shortcuts, still launching the old version beside the new one.
+Type: filesandordirs; Name: "{localappdata}\Programs\HEXR Window Tester"
+Type: files; Name: "{autodesktop}\HEXR Window Tester.lnk"
+Type: filesandordirs; Name: "{autoprograms}\HEXR Window Tester"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\__pycache__"

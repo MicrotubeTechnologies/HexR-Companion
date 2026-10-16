@@ -13,6 +13,7 @@ import tkinter as tk
 
 from .. import protocol as P
 from .. import theme as T
+from ..i18n import N_, tr
 from ..state import HANDS
 from ..widgets import (Button, Cell, Divider, Meter, Panel, Readout, Slider,
                        Surface)
@@ -27,9 +28,9 @@ METER_FULL_KPA = 60.0
 
 
 class TestScreen(Screen):
-    title_text = "Test the haptics"
-    sub_text = ("Pick channels, set the strength, and trigger. Release vents "
-                "them again — nothing switches itself off.")
+    title_text = N_("Test the haptics")
+    sub_text = N_("Pick channels, set the strength, and trigger. Release vents "
+                  "them again — nothing switches itself off.")
 
     def __init__(self, parent, app):
         super().__init__(parent, app)
@@ -58,11 +59,14 @@ class TestScreen(Screen):
     # -- left: controls ------------------------------------------------------
 
     def _build_hands(self, parent):
-        section_label(parent, "Hand").pack(fill="x")
+        section_label(parent, tr("Hand")).pack(fill="x")
         row = tk.Frame(parent, bg=T.SURFACE)
         row.pack(fill="x", pady=(8, 0))
+        # A cell answers with its label, which is translated; the lambdas
+        # answer with the key instead.
         for hand in HANDS:
-            c = Cell(row, hand, sub="not connected", command=self._toggle_hand,
+            c = Cell(row, tr(hand), sub=tr("not connected"),
+                     command=lambda _l, h=hand: self._toggle_hand(h),
                      height=52, mono_label=False)
             c.pack(side="left", fill="x", expand=True, padx=(0, 8))
             self._hand_cells[hand] = c
@@ -70,15 +74,15 @@ class TestScreen(Screen):
     def _build_channels(self, parent):
         head = tk.Frame(parent, bg=T.SURFACE)
         head.pack(fill="x", pady=(20, 0))
-        section_label(head, "Channels").pack(side="left", pady=(6, 0))
+        section_label(head, tr("Channels")).pack(side="left", pady=(6, 0))
         # These were grey text links sitting in the corner and nobody found
         # them. Selecting all six is the single most common thing done on this
         # screen, so it gets a real button.
-        Button(head, "None", command=lambda: self._select(set()),
+        Button(head, tr("None"), command=lambda: self._select(set()),
                height=28, fill=T.INSET, fg=T.TEXT_2, border=T.BORDER,
                hover_fill=T.INSET, hover_fg=T.TEXT, hover_border=T.TEXT_MUTED,
                padx=14, font=T.font(12, 600)).pack(side="right")
-        Button(head, "Select all", command=lambda: self._select(
+        Button(head, tr("Select all"), command=lambda: self._select(
                    {c for c, _ in CHANNELS}),
                height=28, fill=T.INSET, fg=T.TEXT, border=T.BORDER,
                hover_fill=T.ACCENT, hover_fg=T.CANVAS, hover_border=T.ACCENT,
@@ -87,21 +91,21 @@ class TestScreen(Screen):
         grid = tk.Frame(parent, bg=T.SURFACE)
         grid.pack(fill="x", pady=(8, 0))
         for i, (chan, label) in enumerate(CHANNELS):
-            c = Cell(grid, label, command=self._toggle_channel, height=52,
-                     mono_label=False)
+            c = Cell(grid, tr(label), command=lambda _l, ch=chan: self._toggle_channel(ch),
+                     height=52, mono_label=False)
             c.grid(row=i // 3, column=i % 3, sticky="ew", padx=(0, 8), pady=(0, 8))
             self._chan_cells[chan] = c
         for col in range(3):
             grid.grid_columnconfigure(col, weight=1)
 
     def _build_mode(self, parent):
-        section_label(parent, "Mode").pack(fill="x", pady=(12, 0))
+        section_label(parent, tr("Mode")).pack(fill="x", pady=(12, 0))
         row = tk.Frame(parent, bg=T.SURFACE)
         row.pack(fill="x", pady=(8, 0))
-        for key, label, sub in (("pressure", "Pressure", "steady squeeze"),
-                                ("vibration", "Vibration", "oscillating")):
-            c = Cell(row, label, sub=sub, command=self._pick_mode, height=52,
-                     mono_label=False)
+        for key, label, sub in (("pressure", tr("Pressure"), tr("steady squeeze")),
+                                ("vibration", tr("Vibration"), tr("oscillating"))):
+            c = Cell(row, label, sub=sub, command=lambda _l, k=key: self._pick_mode(k),
+                     height=52, mono_label=False)
             c.pack(side="left", fill="x", expand=True, padx=(0, 8))
             self._mode_cells[key] = c
 
@@ -109,13 +113,13 @@ class TestScreen(Screen):
         self.params = tk.Frame(parent, bg=T.SURFACE)
         self.params.pack(fill="x", pady=(18, 0))
 
-        self.intensity = self._slider("Intensity", 0.1, 1.0,
+        self.intensity = self._slider(tr("Intensity"), 0.1, 1.0,
                                       self.settings.intensity, self._set_intensity)
-        self.speed = self._slider("Ramp speed", 0.1, 1.0,
+        self.speed = self._slider(tr("Ramp speed"), 0.1, 1.0,
                                   self.settings.speed, self._set_speed)
-        self.frequency = self._slider("Frequency", 0.1, 40.0,
+        self.frequency = self._slider(tr("Frequency"), 0.1, 40.0,
                                       self.settings.frequency, self._set_frequency)
-        self.peak = self._slider("Peak ratio", 0.2, 0.8,
+        self.peak = self._slider(tr("Peak ratio"), 0.2, 0.8,
                                  self.settings.peak_ratio, self._set_peak)
 
         self.regime = tk.Label(self.params, text="", bg=T.SURFACE,
@@ -141,13 +145,13 @@ class TestScreen(Screen):
     def _build_actions(self, parent):
         row = tk.Frame(parent, bg=T.SURFACE)
         row.pack(fill="x", pady=(6, 0))
-        Button(row, "Trigger", command=self._trigger, glyph="▶",
+        Button(row, tr("Trigger"), command=self._trigger, glyph="▶",
                min_width=150).pack(side="left")
-        Button(row, "Release", command=self._release, fill=T.INSET,
+        Button(row, tr("Release"), command=self._release, fill=T.INSET,
                fg=T.TEXT, border=T.BORDER, hover_fill=T.INSET,
                hover_fg=T.ACCENT, hover_border=T.ACCENT,
                min_width=130).pack(side="left", padx=(10, 0))
-        Button(row, "All off", command=self.app.all_off, fill=T.INSET,
+        Button(row, tr("All off"), command=self.app.all_off, fill=T.INSET,
                fg=T.DANGER, border=T.BORDER, hover_fill=T.INSET,
                hover_fg=T.DANGER, hover_border=T.DANGER, glyph="■",
                min_width=130).pack(side="left", padx=(10, 0))
@@ -155,7 +159,7 @@ class TestScreen(Screen):
     # -- right: live monitor -------------------------------------------------
 
     def _build_monitor(self, parent):
-        section_label(parent, "Live from the glove").pack(fill="x")
+        section_label(parent, tr("Live from the glove")).pack(fill="x")
         self.monitor_hand = tk.Label(parent, text="", bg=T.SURFACE,
                                      fg=T.TEXT_MUTED, font=T.font(12),
                                      anchor="w")
@@ -166,7 +170,7 @@ class TestScreen(Screen):
         for chan, label in CHANNELS:
             row = tk.Frame(surf, bg=T.RAISED)
             row.pack(fill="x", padx=16, pady=(11, 0))
-            tk.Label(row, text=label, bg=T.RAISED, fg=T.TEXT_2,
+            tk.Label(row, text=tr(label), bg=T.RAISED, fg=T.TEXT_2,
                      font=T.font(12), width=7, anchor="w").pack(side="left")
             val = tk.Label(row, text="—", bg=T.RAISED, fg=T.TEXT,
                            font=T.mono(11.5), width=9, anchor="e")
@@ -180,9 +184,9 @@ class TestScreen(Screen):
 
         stats = tk.Frame(parent, bg=T.SURFACE)
         stats.pack(fill="x", pady=(16, 0))
-        self.battery = Readout(stats, "Battery", "—")
+        self.battery = Readout(stats, tr("Battery"), "—")
         self.battery.pack(side="left", fill="x", expand=True, padx=(0, 8))
-        self.source = Readout(stats, "Source", "—")
+        self.source = Readout(stats, tr("Source"), "—")
         self.source.pack(side="left", fill="x", expand=True)
 
         self.note = tk.Label(parent, text="", bg=T.SURFACE, fg=T.TEXT_FAINT,
@@ -192,15 +196,14 @@ class TestScreen(Screen):
 
     # -- interaction ---------------------------------------------------------
 
-    def _toggle_hand(self, label):
-        if label in self.settings.hands:
-            self.settings.hands.discard(label)
+    def _toggle_hand(self, hand):
+        if hand in self.settings.hands:
+            self.settings.hands.discard(hand)
         else:
-            self.settings.hands.add(label)
+            self.settings.hands.add(hand)
         self.refresh()
 
-    def _toggle_channel(self, label):
-        chan = next(c for c, l in CHANNELS if l == label)
+    def _toggle_channel(self, chan):
         if chan in self.settings.channels:
             self.settings.channels.discard(chan)
         else:
@@ -211,8 +214,8 @@ class TestScreen(Screen):
         self.settings.channels = set(channels)
         self.refresh()
 
-    def _pick_mode(self, label):
-        self.settings.mode = label.lower()
+    def _pick_mode(self, mode):
+        self.settings.mode = mode
         self.refresh()
 
     def _set_intensity(self, v):
@@ -254,7 +257,7 @@ class TestScreen(Screen):
             g = self.app.state.get(hand)
             live = bool(g and g.connected)
             cell.set(live and hand in s.hands)
-            cell.sub = "connected" if live else "not connected"
+            cell.sub = tr("connected") if live else tr("not connected")
             cell.render()
         for chan, cell in self._chan_cells.items():
             cell.set(chan in s.channels)
@@ -277,14 +280,15 @@ class TestScreen(Screen):
             # The firmware switches technique at 5 Hz, and the two feel nothing
             # alike. Saying which one is running turns a confusing result into
             # an expected one.
+            hz = f"{P.PWM_VIBRATION_HZ:.0f}"
             if s.frequency < P.PWM_VIBRATION_HZ:
                 self.regime.configure(
-                    text=f"Under {P.PWM_VIBRATION_HZ:.0f} Hz the glove vibrates "
-                         "pneumatically — the pressure target is pulsed.")
+                    text=tr("Under {hz} Hz the glove vibrates pneumatically — the "
+                            "pressure target is pulsed.", hz=hz))
             else:
                 self.regime.configure(
-                    text=f"At {P.PWM_VIBRATION_HZ:.0f} Hz and above the pressure "
-                         "loop is off and the channel's motor is driven directly.")
+                    text=tr("At {hz} Hz and above the pressure loop is off and the "
+                            "channel's motor is driven directly.", hz=hz))
         else:
             self.regime.configure(text="")
 
@@ -301,7 +305,7 @@ class TestScreen(Screen):
         hands = [h for h in HANDS
                  if (g := self.app.state.get(h)) and g.connected]
         if not hands:
-            self.monitor_hand.configure(text="No glove connected")
+            self.monitor_hand.configure(text=tr("No glove connected"))
             for chan, _ in CHANNELS:
                 self._meters[chan].set(value=0.0, over=False, on=False)
                 self._values[chan].configure(text="—")
@@ -313,7 +317,8 @@ class TestScreen(Screen):
         hand = next((h for h in hands if h in self.settings.hands), hands[0])
         g = self.app.state.get(hand)
         self.monitor_hand.configure(
-            text=f"{hand} glove" + ("" if g.is_live() else "  ·  no telemetry"))
+            text=tr("{hand} glove", hand=tr(hand)) +
+            ("" if g.is_live() else "  ·  " + tr("no telemetry")))
         for chan, _ in CHANNELS:
             kpa = g.kpa(chan)
             self._meters[chan].set(value=max(0.0, kpa) / METER_FULL_KPA,
@@ -323,8 +328,8 @@ class TestScreen(Screen):
         self.source.set(f"{g.source_kpa():.1f} kPa")
         if g.absolute_pa:
             self.note.configure(
-                text="This glove reports absolute pressure; readings are "
-                     "converted to gauge kPa.")
+                text=tr("This glove reports absolute pressure; readings are "
+                        "converted to gauge kPa."))
         else:
             self.note.configure(text="")
 

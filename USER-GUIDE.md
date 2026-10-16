@@ -1,4 +1,4 @@
-# HEXR Window Tester — how to use it
+# HEXR Companion — how to use it
 
 A Windows and macOS app for checking a HEXR glove and feeling what it can do. Connect a
 glove, drive any finger, and see what the hardware reports back. No code, no
@@ -19,8 +19,8 @@ Use it to answer three kinds of question:
 
 ## Install
 
-Download **`HexR-Window-Tester-Setup.exe`** from the
-[latest release](https://github.com/MicrotubeTechnologies/HexR-Window-Tester/releases/latest)
+Download **`HexR-Companion-Setup.exe`** from the
+[latest release](https://github.com/MicrotubeTechnologies/HexR-Companion/releases/latest)
 and run it.
 
 - Windows 10 or 11, 64-bit
@@ -32,14 +32,18 @@ SmartScreen shows *"Windows protected your PC"*. Choose **More info → Run
 anyway**. Nothing is wrong; an unsigned installer simply has no certificate for
 Windows to check.
 
-You get a **HEXR Window Tester** icon on your desktop and in the Start menu.
+You get a **HEXR Companion** icon on your desktop and in the Start menu.
+
+Until version 0.4.0 the app was called **HEXR Window Tester**. If you have it,
+installing HEXR Companion replaces it: the old icons go and the new ones take
+their place.
 
 ---
 
 ### On a Mac
 
-Download **`HexR-Window-Tester-Mac.pkg`**, double-click it, and click through
-the installer (**Continue → Install**). It installs **HEXR Window Tester**
+Download **`HexR-Companion-Mac.pkg`**, double-click it, and click through
+the installer (**Continue → Install**). It installs **HEXR Companion**
 into Applications; open it from there or from Launchpad.
 
 - macOS 10.13 or newer, on Apple silicon or Intel
@@ -48,7 +52,9 @@ into Applications; open it from there or from Launchpad.
   you clicked *Don't Allow*, turn it back on in System Settings → Privacy &
   Security → Bluetooth.
 
-As on Windows, do not pair the glove in the Mac's Bluetooth settings.
+As on Windows, do not pair the glove in the Mac's Bluetooth settings. A
+**HEXR Window Tester** left in Applications from before is the same app under
+its old name; move it to the Bin.
 
 ---
 
@@ -215,13 +221,18 @@ maximised window pulls it loose under the cursor.
 
 Drag the bar to move the window. There is no OS frame — the app draws its own.
 
+**English | 中文**, at the bottom of the left rail just above the version,
+switches the whole app between English and Simplified Chinese. The app
+remembers the choice the next time it opens.
+
 ---
 
 ## Headsets
 
 At an event, the headsets running a HEXR app can be looked after from here
-without taking one off anyone: connect and disconnect their gloves, change the
-scene, run the app's own commands, and watch what the wearer sees.
+without taking one off anyone: connect and disconnect their gloves, recenter
+the wearer, change the scene, run the app's own commands, and watch what the
+wearer sees.
 
 A headset shows up when its app was built with **HexR 0.10.0 or newer with
 HexR Remote added**, it is on the **same network** as this computer, and the
@@ -234,6 +245,10 @@ Press **Open** on a headset to see its gloves, its scene and its view.
   over its own Bluetooth. A glove talks to one thing at a time, so if this
   computer (or a phone) has it, disconnect it there first.
 - **Scene** — pick one and the headset switches to it.
+- **Recenter** — puts the wearer back on the scene's starting spot, facing its
+  front, for someone who has wandered off or was handed the headset facing the
+  wrong way. Works on Quest and PICO alike. The app needs **HexR 0.11.0 or
+  newer**; on an older one the button is greyed out.
 - **Watch** — the wearer is asked in the headset to allow sharing their view;
   once they do, it appears here. **Stop watching** leaves the view running for
   anyone else still watching it.

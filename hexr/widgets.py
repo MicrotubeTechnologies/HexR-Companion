@@ -1,4 +1,4 @@
-"""Canvas primitives for the HEXR Window Tester UI.
+"""Canvas primitives for the HEXR Companion UI.
 
 Tkinter has no rounded corners, no borders that aren't 3D bevels, and no
 hover states, so every surface in the design is drawn by hand here. Two
@@ -20,6 +20,7 @@ import sys
 import tkinter as tk
 
 from . import theme as T
+from .i18n import tr
 
 
 def round_pts(x1, y1, x2, y2, r):
@@ -373,7 +374,7 @@ class GlovesButton(tk.Canvas):
         self.create_line(x, y + 5, x + 9, y + 13, x + 4.5, y + 17, x + 4.5, y + 1,
                          x + 9, y + 5, x, y + 13, fill=fg, width=1.6,
                          capstyle="round", joinstyle="round")
-        self.create_text(34, self.H / 2, text="Gloves", anchor="w", fill=fg,
+        self.create_text(34, self.H / 2, text=tr("Gloves"), anchor="w", fill=fg,
                          font=self._font)
         if self._dot:
             self.create_oval(self.W - 20, 13, self.W - 12, 21, fill=self._dot,
@@ -1030,6 +1031,10 @@ class ScrollArea(tk.Frame):
         self._canvas.itemconfigure(self._win, width=e.width - self._padx * 2)
 
     def _on_wheel(self, e):
+        # bind_all outlives the area: one the window rebuilt without (a
+        # language change) is still called, and has nothing left to scroll
+        if not self.winfo_exists():
+            return
         # only scroll when the pointer is actually over this area
         x, y = self.winfo_pointerxy()
         w = self.winfo_containing(x, y)

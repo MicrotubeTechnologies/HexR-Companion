@@ -12,7 +12,7 @@ questions that state can mean, in order:
     python tools/probe_glove.py --address AA:BB:CC:DD:EE:FF
     python tools/probe_glove.py --seconds 20
 
-Close HEXR Window Tester first. A BLE peripheral generally accepts one connection,
+Close HEXR Companion first. A BLE peripheral generally accepts one connection,
 so the app holding the glove is itself a reason a second connect sees nothing.
 """
 
@@ -50,7 +50,7 @@ async def probe(address: str | None, hand: str | None, seconds: float):
         if not found:
             print("nothing found.")
             print("\nThe glove is not advertising. Check the arm module is "
-                  "powered on, and that HEXR Window Tester is not already connected "
+                  "powered on, and that HEXR Companion is not already connected "
                   "to it.")
             return 1
         print(f"found {len(found)}")

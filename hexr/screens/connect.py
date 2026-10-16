@@ -13,6 +13,7 @@ import tkinter as tk
 
 from .. import protocol as P
 from .. import theme as T
+from ..i18n import N_, tr
 from ..state import HANDS
 from ..widgets import Button, Dot, Divider, Panel, Surface
 from .base import Screen, section_label
@@ -21,13 +22,13 @@ from .base import Screen, section_label
 COLS = (None, 90, 150, 80, 130)
 
 
-SCAN_TITLE = "Connect a HEXR glove"
-SCAN_SUB = ("Power on the arm module and press scan. Left and right are "
-            "separate devices — connect either, or both. Testing starts as soon "
-            "as one connects.")
-PANEL_TITLE = "Gloves"
-PANEL_SUB = ("Connect the other glove, check battery and pressure, or "
-             "disconnect.")
+SCAN_TITLE = N_("Connect a HEXR glove")
+SCAN_SUB = N_("Power on the arm module and press scan. Left and right are "
+              "separate devices — connect either, or both. Testing starts as soon "
+              "as one connects.")
+PANEL_TITLE = N_("Gloves")
+PANEL_SUB = N_("Connect the other glove, check battery and pressure, or "
+               "disconnect.")
 
 
 class ConnectScreen(Screen):
@@ -41,11 +42,11 @@ class ConnectScreen(Screen):
 
         bar = tk.Frame(self.body, bg=T.SURFACE)
         bar.pack(fill="x")
-        self._scan_label = "Scan for HEXR"
+        self._scan_label = tr("Scan for HEXR")
         self.scan_btn = Button(bar, self._scan_label, command=self._toggle_scan,
                                glyph="→", min_width=170)
         self.scan_btn.pack(side="left")
-        self.scan_status = tk.Label(bar, text="Bluetooth ready", bg=T.SURFACE,
+        self.scan_status = tk.Label(bar, text=tr("Bluetooth ready"), bg=T.SURFACE,
                                     fg=T.TEXT_MUTED, font=T.font(12.5))
         self.scan_status.pack(side="left", padx=(14, 0))
 
@@ -54,7 +55,7 @@ class ConnectScreen(Screen):
         self._build_header()
         self.empty = tk.Label(
             self.results,
-            text="No gloves yet. Press scan with the arm module switched on.",
+            text=tr("No gloves yet. Press scan with the arm module switched on."),
             bg=T.RAISED, fg=T.TEXT_MUTED, font=T.font(12.5))
         self.empty.pack(fill="x", padx=18, pady=18)
 
@@ -64,10 +65,10 @@ class ConnectScreen(Screen):
     def set_mode(self, panel: bool, on_close=None):
         """The scan in front of Test while nothing is connected, or the Gloves
         panel over it once something is."""
-        self.set_heading(PANEL_TITLE if panel else SCAN_TITLE,
-                         PANEL_SUB if panel else SCAN_SUB)
+        self.set_heading(tr(PANEL_TITLE if panel else SCAN_TITLE),
+                         tr(PANEL_SUB if panel else SCAN_SUB))
         self.set_close(on_close if panel else None)
-        self._scan_label = "Scan for gloves" if panel else "Scan for HEXR"
+        self._scan_label = tr("Scan for gloves") if panel else tr("Scan for HEXR")
         if not self.app.engine.scanning:
             self.scan_btn.set(text=self._scan_label, glyph="→")
 
@@ -77,7 +78,7 @@ class ConnectScreen(Screen):
         head = tk.Frame(self.results, bg=T.RAISED)
         head.pack(fill="x", padx=18, pady=(14, 0))
         for i, (label, width) in enumerate(
-                zip(("Device", "Hand", "Address", "Signal", ""), COLS)):
+                zip((tr("Device"), tr("Hand"), tr("Address"), tr("Signal"), ""), COLS)):
             lbl = section_label(head, label, bg=T.RAISED)
             lbl.grid(row=0, column=i, sticky="w", padx=(0, 10))
             if width:
@@ -101,14 +102,14 @@ class ConnectScreen(Screen):
         tk.Label(name, text=found["name"], bg=T.RAISED, fg=T.TEXT,
                  font=T.font(13)).pack(side="left", padx=(8, 0))
 
-        cells = (found["hand"], found["address"],
+        cells = (tr(found["hand"]), found["address"],
                  f"{found['rssi']} dBm" if found.get("rssi") is not None else "—")
         for i, text in enumerate(cells, start=1):
             tk.Label(row, text=text, bg=T.RAISED, fg=T.TEXT_2,
                      font=T.mono(11.5)).grid(row=0, column=i, sticky="w",
                                              padx=(0, 10))
 
-        btn = Button(row, "Connect", command=lambda f=found: self._connect(f),
+        btn = Button(row, tr("Connect"), command=lambda f=found: self._connect(f),
                      height=30, fill=T.INSET, fg=T.TEXT, border=T.BORDER,
                      hover_fill=T.ACCENT, hover_fg=T.CANVAS,
                      hover_border=T.ACCENT, min_width=110)
@@ -123,7 +124,7 @@ class ConnectScreen(Screen):
         self.app.connect_glove(found)
         btn = found.get("_button")
         if btn:
-            btn.set(text="Connecting…", disabled=True)
+            btn.set(text=tr("Connecting…"), disabled=True)
 
     # -- scanning ------------------------------------------------------------
 
@@ -135,8 +136,8 @@ class ConnectScreen(Screen):
             row.destroy()
         self._rows.clear()
         self.empty.pack(fill="x", padx=18, pady=18)
-        self.scan_btn.set(text="Stop", glyph="■")
-        self.scan_status.configure(text="Listening for gloves…", fg=T.TEXT_MUTED)
+        self.scan_btn.set(text=tr("Stop"), glyph="■")
+        self.scan_status.configure(text=tr("Listening for gloves…"), fg=T.TEXT_MUTED)
         self.app.engine.scan(self._on_result, self._on_done)
 
     def _on_result(self, found: dict):
@@ -144,25 +145,29 @@ class ConnectScreen(Screen):
         self.after(0, lambda: self._add_safe(found))
 
     def _add_safe(self, found: dict):
+        if not self.winfo_exists():         # rebuilt in another language since
+            return
         self.add_result(found)
-        self.scan_status.configure(text=f"Found {len(self._rows)}", fg=T.SUCCESS)
+        self.scan_status.configure(text=tr("Found {n}", n=len(self._rows)), fg=T.SUCCESS)
 
     def _on_done(self, error):
         self.after(0, lambda: self._done_safe(error))
 
     def _done_safe(self, error):
+        if not self.winfo_exists():
+            return
         self.scan_btn.set(text=self._scan_label, glyph="→")
         if error:
             # A disabled adapter is not "no gloves found" — saying so sends
             # people hunting for a hardware fault that is not there.
-            self.scan_status.configure(text=f"Bluetooth unavailable — {error}",
+            self.scan_status.configure(text=tr("Bluetooth unavailable — {error}", error=error),
                                        fg=T.DANGER)
         elif not self._rows:
             self.scan_status.configure(
-                text="Nothing found. Is the arm module switched on?",
+                text=tr("Nothing found. Is the arm module switched on?"),
                 fg=T.TEXT_MUTED)
         else:
-            self.scan_status.configure(text=f"Found {len(self._rows)}",
+            self.scan_status.configure(text=tr("Found {n}", n=len(self._rows)),
                                        fg=T.SUCCESS)
 
     # -- connected cards -----------------------------------------------------
@@ -188,7 +193,7 @@ class ConnectScreen(Screen):
         top.pack(fill="x")
         card.dot = Dot(top, color=T.DOT_OFF, bg=T.RAISED)
         card.dot.pack(side="left", pady=(5, 0))
-        tk.Label(top, text=f"{hand} glove", bg=T.RAISED, fg=T.TEXT,
+        tk.Label(top, text=tr("{hand} glove", hand=tr(hand)), bg=T.RAISED, fg=T.TEXT,
                  font=T.font(15, 600)).pack(side="left", padx=(9, 0))
         card.status = tk.Label(b, text="", bg=T.RAISED, fg=T.TEXT_MUTED,
                                font=T.font(12.5), anchor="w")
@@ -196,7 +201,7 @@ class ConnectScreen(Screen):
         card.batt = tk.Label(b, text="", bg=T.RAISED, fg=T.TEXT_2,
                              font=T.mono(11.5), anchor="w")
         card.batt.pack(fill="x", pady=(4, 0))
-        Button(b, "Disconnect", command=lambda h=hand: self.app.disconnect(h),
+        Button(b, tr("Disconnect"), command=lambda h=hand: self.app.disconnect(h),
                height=30, fill=T.INSET, fg=T.TEXT_2, border=T.BORDER,
                hover_fill=T.INSET, hover_fg=T.DANGER, hover_border=T.DANGER,
                min_width=140).pack(fill="x", pady=(14, 0))
@@ -210,16 +215,25 @@ class ConnectScreen(Screen):
         card.dot.set(T.ACCENT if g.connecting else
                      T.SUCCESS if g.connected else T.DANGER)
         if g.connecting:
-            card.status.configure(text="Connecting…", fg=T.TEXT_MUTED)
+            card.status.configure(text=tr("Connecting…"), fg=T.TEXT_MUTED)
         elif live:
-            card.status.configure(text="Connected · streaming", fg=T.SUCCESS)
+            card.status.configure(text=tr("Connected · streaming"), fg=T.SUCCESS)
         elif g.connected:
             # Connected and usable — it simply is not reporting pressure.
             # Flagged quietly, not as a fault: haptics work either way.
-            card.status.configure(text="Connected", fg=T.SUCCESS)
+            card.status.configure(text=tr("Connected"), fg=T.SUCCESS)
         else:
-            card.status.configure(text=g.status, fg=T.TEXT_MUTED)
-        card.batt.configure(text=f"battery {g.battery_label()}   {g.address}")
+            card.status.configure(text=status_text(g.status), fg=T.TEXT_MUTED)
+        card.batt.configure(text=tr("battery {level}", level=g.battery_label()) +
+                            f"   {g.address}")
 
     def on_show(self):
         self.refresh()
+
+
+def status_text(status: str) -> str:
+    """The engine's word for a glove, in the language picked. It writes them in
+    English from its own thread; an error carries the system's own message."""
+    if status.startswith("Error: "):
+        return tr("Error: {error}", error=status[len("Error: "):])
+    return tr(status)

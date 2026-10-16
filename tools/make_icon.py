@@ -1,4 +1,4 @@
-"""Generate the HEXR Window Tester app icon.
+"""Generate the HEXR Companion app icon.
 
     python tools/make_icon.py            # writes the shipping icon
     python tools/make_icon.py --preview  # writes a contact sheet of all styles

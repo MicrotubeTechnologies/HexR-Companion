@@ -9,11 +9,13 @@ from __future__ import annotations
 import tkinter as tk
 
 from .. import theme as T
+from ..i18n import tr
 from ..widgets import Button, ScrollArea
 
 
 class Screen(tk.Frame):
-    """Base screen. Build your content into `self.body`."""
+    """Base screen. Build your content into `self.body`. `title_text` and
+    `sub_text` are English marked with N_(), and shown translated."""
 
     title_text = ""
     sub_text = ""
@@ -31,15 +33,15 @@ class Screen(tk.Frame):
         title_row.pack(fill="x", anchor="w")
         # A screen opened as a panel over another (Gloves, Quick test) closes
         # back to it from here.
-        self._close = Button(title_row, "Close", glyph="×", glyph_px=15, height=32,
+        self._close = Button(title_row, tr("Close"), glyph="×", glyph_px=15, height=32,
                              fill=T.RAISED, fg=T.TEXT_2, border=T.BORDER,
                              hover_fill=T.INSET, hover_fg=T.TEXT,
                              hover_border=T.ACCENT, min_width=96)
-        self._title = tk.Label(title_row, text=self.title_text, bg=T.SURFACE,
+        self._title = tk.Label(title_row, text=tr(self.title_text), bg=T.SURFACE,
                                fg=T.TEXT, font=T.font(22, 600), anchor="w",
                                justify="left")
         self._title.pack(side="left", fill="x", expand=True, anchor="w")
-        self._sub = tk.Label(self.head, text=self.sub_text, bg=T.SURFACE,
+        self._sub = tk.Label(self.head, text=tr(self.sub_text), bg=T.SURFACE,
                              fg=T.TEXT_MUTED, font=T.font(13.5), anchor="w",
                              justify="left", wraplength=620)
         self._sub.pack(fill="x", anchor="w", pady=(6, 0))
@@ -48,6 +50,7 @@ class Screen(tk.Frame):
         self.body.pack(fill="both", expand=True, pady=(22, 0))
 
     def set_heading(self, title=None, sub=None):
+        """Already translated: the caller knows its own words."""
         if title is not None:
             self._title.configure(text=title)
         if sub is not None:

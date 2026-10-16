@@ -12,14 +12,13 @@ shown, so the firewall question Windows asks appears when someone has just asked
 
 from __future__ import annotations
 
-import json
-import os
-import sys
 import threading
 import time
 from dataclasses import dataclass
 
 from . import remote as R
+from . import settings
+from .i18n import tr
 
 # A headset that stopped announcing and cannot be reached has gone: switched off, or its app
 # closed. One added by address stays until forgotten, since nothing else would bring it back.
@@ -127,6 +126,9 @@ class Headsets:
     def run_command(self, key: str, command_id: str):
         self._send(key, R.command(command_id))
 
+    def recenter(self, key: str):
+        self._send(key, R.recenter())
+
     def start_view(self, key: str):
         self._send(key, R.stream("start"))
 
@@ -139,7 +141,7 @@ class Headsets:
             if entry:
                 entry.error = None
         if entry and not entry.link.send(line):
-            self.on_error(key, "", "Not connected to this headset right now.")
+            self.on_error(key, "", tr("Not connected to this headset right now."))
 
     # -- the snapshot ------------------------------------------------------------
 
@@ -227,34 +229,15 @@ def _short_id(key: str) -> str:
     return key[3:] if key.startswith("ip:") else key[-4:].upper()
 
 
-# -- nicknames, the one thing kept between runs ------------------------------------
-
-def _config_path() -> str:
-    if sys.platform == "win32":
-        base = os.environ.get("APPDATA") or os.path.expanduser("~")
-    elif sys.platform == "darwin":
-        base = os.path.expanduser("~/Library/Application Support")
-    else:
-        base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-    return os.path.join(base, "HEXR Window Tester", "headsets.json")
-
+# -- nicknames, kept between runs ----------------------------------------------------
 
 def _load_nicknames() -> dict[str, str]:
     try:
-        with open(_config_path(), encoding="utf-8") as f:
-            data = json.load(f)
-        return {str(k): str(v) for k, v in data.get("nicknames", {}).items()}
-    except (OSError, ValueError, AttributeError):
+        return {str(k): str(v) for k, v in settings.load("headsets.json")
+                .get("nicknames", {}).items()}
+    except AttributeError:
         return {}
 
 
 def _save_nicknames(nicknames: dict[str, str]):
-    path = _config_path()
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".new"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"nicknames": nicknames}, f, indent=2)
-        os.replace(tmp, path)
-    except OSError:
-        pass  # a name that does not stick is not worth an error dialog
+    settings.save("headsets.json", {"nicknames": nicknames})

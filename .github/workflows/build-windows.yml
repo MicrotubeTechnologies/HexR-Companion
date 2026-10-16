@@ -9,7 +9,7 @@ name: Build Windows installer
 #
 #     git tag v1.0.1 && git push --tags
 #
-#     https://github.com/<owner>/<repo>/releases/latest/download/HexR-Window-Tester-Setup.exe
+#     https://github.com/<owner>/<repo>/releases/latest/download/HexR-Companion-Setup.exe
 #
 # That link keeps working across releases because the asset name has no version
 # in it - GitHub resolves /latest/download/<name> by exact filename, so a
@@ -78,6 +78,7 @@ jobs:
         run: |
           python tests/test_protocol.py
           python tests/test_remote.py
+          python tests/test_i18n.py
 
       # The icon is generated, not checked in as a finished asset. Drawing it
       # here means a release can never ship an icon that lags the generator.
@@ -85,7 +86,7 @@ jobs:
         run: python tools/make_icon.py
 
       - name: Build the app
-        run: pyinstaller --noconfirm --clean HexR-Window-Tester.spec
+        run: pyinstaller --noconfirm --clean HexR-Companion.spec
 
       # Inno Setup ships preinstalled on the windows-latest runner image.
       # No /D or /S flags: there is no code signing, so the compiler needs
@@ -93,19 +94,36 @@ jobs:
       - name: Build the installer
         shell: pwsh
         run: |
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\HexR-Window-Tester.iss
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging\HexR-Companion.iss
           if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
-          if (-not (Test-Path 'Installer\HexR-Window-Tester-Setup.exe')) {
-            throw 'expected Installer\HexR-Window-Tester-Setup.exe - the website link depends on this exact name'
+          if (-not (Test-Path 'Installer\HexR-Companion-Setup.exe')) {
+            throw 'expected Installer\HexR-Companion-Setup.exe - the download links depend on this exact name'
           }
+
+      - name: Zip the portable build
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist\HexR-Companion\* `
+            -DestinationPath Installer\HexR-Companion-portable.zip -Force
+
+      # Until 0.4.0 the app was HEXR Window Tester, and its downloads were
+      # HexR-Window-Tester-Setup.exe and HexR-Window-Tester-portable.zip. The
+      # Microtube website and the Microtube-Apps table still link
+      # /releases/latest/download/ under those names, so each release carries
+      # the same two files under them too. Drop this step, and the two copies
+      # from the release's files below, once they link the new names. Copied
+      # before the checksums so SHA256SUMS.txt lists them; being the same
+      # bytes, the provenance below covers them as well.
+      - name: Keep the old download links working
+        shell: pwsh
+        run: |
+          Copy-Item 'Installer\HexR-Companion-Setup.exe' 'Installer\HexR-Window-Tester-Setup.exe'
+          Copy-Item 'Installer\HexR-Companion-portable.zip' 'Installer\HexR-Window-Tester-portable.zip'
 
       - name: Checksum everything published
         id: files
         shell: pwsh
         run: |
-          Compress-Archive -Path dist\HexR-Window-Tester\* `
-            -DestinationPath Installer\HexR-Window-Tester-portable.zip -Force
-
           # sha256sum -c reads this format directly: hash, two spaces, name.
           $lines = Get-ChildItem Installer -File |
             Where-Object { $_.Name -ne 'SHA256SUMS.txt' } |
@@ -126,23 +144,23 @@ jobs:
           # Surfaced in the release notes too, so the hash to compare against is
           # visible on the release page itself and not only inside a file that
           # arrived over the same connection.
-          $h = (Get-FileHash 'Installer\HexR-Window-Tester-Setup.exe' `
+          $h = (Get-FileHash 'Installer\HexR-Companion-Setup.exe' `
                   -Algorithm SHA256).Hash.ToLower()
           "installer_sha256=$h" | Out-File $env:GITHUB_OUTPUT -Append
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: HexR-Window-Tester-Setup
+          name: HexR-Companion-Setup
           path: |
-            Installer\HexR-Window-Tester-Setup.exe
+            Installer\HexR-Companion-Setup.exe
             Installer\SHA256SUMS.txt
 
       - name: Upload portable zip
         uses: actions/upload-artifact@v4
         with:
-          name: HexR-Window-Tester-Portable
-          path: Installer\HexR-Window-Tester-portable.zip
+          name: HexR-Companion-Portable
+          path: Installer\HexR-Companion-portable.zip
 
       # --- Build provenance -------------------------------------------------
       # The strongest free substitute for a code-signing certificate, and it
@@ -153,7 +171,7 @@ jobs:
       # out of this workflow, from this commit, in this repository. Anyone can
       # check it:
       #
-      #     gh attestation verify HexR-Window-Tester-Setup.exe --repo <owner>/<repo>
+      #     gh attestation verify HexR-Companion-Setup.exe --repo <owner>/<repo>
       #
       # It does NOT silence SmartScreen - only an Authenticode signature does
       # that. What it adds is the one thing a published hash cannot: a hash
@@ -165,8 +183,8 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            Installer/HexR-Window-Tester-Setup.exe
-            Installer/HexR-Window-Tester-portable.zip
+            Installer/HexR-Companion-Setup.exe
+            Installer/HexR-Companion-portable.zip
 
       # --- Release ----------------------------------------------------------
       # GITHUB_TOKEN is provided by Actions and can write releases here, so no
@@ -175,16 +193,16 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          name: HEXR Window Tester ${{ steps.ver.outputs.version }}
+          name: HEXR Companion ${{ steps.ver.outputs.version }}
           generate_release_notes: true
           body: |
             **Version ${{ steps.ver.outputs.version }}** — Windows 10 or newer.
 
-            ### [Download HexR-Window-Tester-Setup.exe](https://github.com/${{ github.repository }}/releases/latest/download/HexR-Window-Tester-Setup.exe)
+            ### [Download HexR-Companion-Setup.exe](https://github.com/${{ github.repository }}/releases/latest/download/HexR-Companion-Setup.exe)
 
             One file. No Python, no developer tools, no driver. It installs for
             the current user only, so it never asks for an administrator
-            password, and leaves a **HEXR Window Tester** icon on your desktop.
+            password, and leaves a **HEXR Companion** icon on your desktop.
 
             **Windows will warn you the first time.** This build is not code
             signed, so SmartScreen shows *"Windows protected your PC"*. Click
@@ -193,12 +211,12 @@ jobs:
 
             ### Verify your download
 
-            SHA-256 of `HexR-Window-Tester-Setup.exe`:
+            SHA-256 of `HexR-Companion-Setup.exe`:
             ```
             ${{ steps.files.outputs.installer_sha256 }}
             ```
             ```powershell
-            Get-FileHash .\HexR-Window-Tester-Setup.exe -Algorithm SHA256
+            Get-FileHash .\HexR-Companion-Setup.exe -Algorithm SHA256
             ```
             `SHA256SUMS.txt` below covers every file in this release.
 
@@ -206,12 +224,14 @@ jobs:
             GitHub rather than by this page, that these bytes were built by this
             repository's workflow from commit `${{ github.sha }}`:
             ```
-            gh attestation verify HexR-Window-Tester-Setup.exe --repo ${{ github.repository }}
+            gh attestation verify HexR-Companion-Setup.exe --repo ${{ github.repository }}
             ```
 
             Provided as-is, without warranty of any kind. The app makes no
             network connections and collects no data.
           files: |
-            Installer/HexR-Window-Tester-Setup.exe
+            Installer/HexR-Companion-Setup.exe
             Installer/SHA256SUMS.txt
+            Installer/HexR-Companion-portable.zip
+            Installer/HexR-Window-Tester-Setup.exe
             Installer/HexR-Window-Tester-portable.zip

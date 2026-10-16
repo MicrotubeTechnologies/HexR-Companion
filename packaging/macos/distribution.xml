@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- productbuild distribution for the macOS installer. tools/build_mac.sh
-     substitutes @VERSION@ and builds the component package it references. -->
+     substitutes @VERSION@ and builds the component package it references.
+     The pkg id is the one from when the app was HEXR Window Tester; see the
+     note in tools/build_mac.sh. -->
 <installer-gui-script minSpecVersion="2">
-    <title>HEXR Window Tester</title>
+    <title>HEXR Companion</title>
     <organization>tech.microtube</organization>
     <welcome file="welcome.html" mime-type="text/html"/>
     <conclusion file="conclusion.html" mime-type="text/html"/>
@@ -16,7 +18,7 @@
     <choices-outline>
         <line choice="app"/>
     </choices-outline>
-    <choice id="app" visible="false" title="HEXR Window Tester">
+    <choice id="app" visible="false" title="HEXR Companion">
         <pkg-ref id="tech.microtube.hexr-window-tester"/>
     </choice>
     <pkg-ref id="tech.microtube.hexr-window-tester" version="@VERSION@" onConclusion="none">app.pkg</pkg-ref>

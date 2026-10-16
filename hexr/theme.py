@@ -1,4 +1,4 @@
-"""Design tokens for the HEXR Window Tester app.
+"""Design tokens for the HEXR Companion app.
 
 Every colour, size and radius in the app comes from here — the handoff spec is
 transcribed once, in one place, so a token change lands everywhere at once.
@@ -119,10 +119,20 @@ if sys.platform == "darwin":
 else:
     FALLBACK_SANS, FALLBACK_MONO = "Segoe UI", "Consolas"
 
+# IBM Plex has no Chinese. Left to itself Tk borrows the missing characters
+# from whatever font it finds first, often a serif SimSun, so in Chinese the
+# sans text is set in the system's own Chinese UI face instead, the first of
+# these that is installed. Its Latin is good enough for the English names and
+# units mixed in. Mono stays Plex: it carries numbers, not sentences.
+CJK_SANS = ("Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
+            "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans SC")
+
 # Resolved once by init(); until then everything falls back.
 _sans: dict[int, tuple[str, str]] = {}
 _mono: dict[int, tuple[str, str]] = {}
 _cache: dict[tuple, tkfont.Font] = {}
+_cjk_family: str | None = None
+_fonts_loaded: int | None = None
 
 HAVE_PLEX = False
 FONT_NOTE = "not initialised"
@@ -161,16 +171,21 @@ def _load_bundled_fonts() -> int:
     return loaded
 
 
-def init(root) -> str:
-    """Resolve the font families. Call once, right after the Tk root exists.
+def init(root, cjk: bool = False) -> str:
+    """Resolve the font families. Call right after the Tk root exists, and
+    again when the language changes: `cjk` sets the sans text in a Chinese
+    face. Fonts made before a call are not changed; the caller rebuilds.
 
     Returns a human-readable note about what was resolved — worth logging,
     because a silent fallback to Segoe UI is otherwise hard to notice.
     """
-    global _sans, _mono, HAVE_PLEX, FONT_NOTE
+    global _sans, _mono, HAVE_PLEX, FONT_NOTE, _cjk_family, _fonts_loaded
 
-    loaded = _load_bundled_fonts()
+    if _fonts_loaded is None:
+        _fonts_loaded = _load_bundled_fonts()
+    loaded = _fonts_loaded
     available = set(tkfont.families(root))
+    _cjk_family = next((f for f in CJK_SANS if f in available), None)
 
     def pick(table: dict[int, str], fallback: str, bold_from: int):
         out = {}
@@ -184,6 +199,9 @@ def init(root) -> str:
         return out
 
     _sans = pick(_SANS_BY_WEIGHT, FALLBACK_SANS, 600)
+    if cjk and _cjk_family:
+        _sans = {w: (_cjk_family, "bold" if w >= 600 else "normal")
+                 for w in _SANS_BY_WEIGHT}
     _mono = pick(_MONO_BY_WEIGHT, FALLBACK_MONO, 600)
     HAVE_PLEX = "IBM Plex Sans" in available
 
@@ -219,6 +237,17 @@ def mono(px: float, weight: int = 400) -> tkfont.Font:
     return font(px, weight, mono=True)
 
 
+def cjk(px: float, weight: int = 400) -> tkfont.Font:
+    """The Chinese face whatever the language: for the one word that is always
+    in Chinese, the language switch's 中文."""
+    key = (round(px), weight, "cjk")
+    if key not in _cache:
+        _cache[key] = tkfont.Font(family=_cjk_family or FALLBACK_SANS,
+                                  size=-round(px),
+                                  weight="bold" if weight >= 600 else "normal")
+    return _cache[key]
+
+
 # ---------------------------------------------------------------------------
 # Faked letter-spacing
 # ---------------------------------------------------------------------------
@@ -232,7 +261,12 @@ HAIR = " "
 
 
 def track(text: str, space: str = HAIR) -> str:
-    """Fake letter-spacing for a short uppercase label ('PORT' -> 'P␣O␣R␣T')."""
+    """Fake letter-spacing for a short uppercase label ('PORT' -> 'P␣O␣R␣T').
+
+    Chinese is left alone: its characters are already evenly spaced, and
+    hair spaces between them only read as gaps."""
+    if any(ord(ch) >= 0x2E80 for ch in text):
+        return text
     return space.join(text)
 
 

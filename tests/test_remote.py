@@ -32,7 +32,8 @@ REFERENCE_STATUS = (
     '{"hand":"right","state":"disconnected","message":"","batteryPct":-1,"pressureDeciKPa":[]}],'
     '"stream":{"state":"live","port":47802,"width":1024,"height":1024,"viewers":1,"message":""},'
     '"commands":[{"id":"reset","label":"Reset demo"}],'
-    '"allowGloveControl":true,"allowVideo":true,"exposeScenes":true,"controllers":2}'
+    '"allowGloveControl":true,"allowVideo":true,"exposeScenes":true,"allowRecenter":true,'
+    '"controllers":2}'
 )
 
 REFERENCE_ANNOUNCE = (
@@ -55,10 +56,11 @@ def test_requests_match_the_reference_lines():
     assert R.scene(2) == '{"type":"scene","index":2}'
     assert R.command("reset") == '{"type":"command","id":"reset"}'
     assert R.stream("start") == '{"type":"stream","action":"start"}'
+    assert R.recenter() == '{"type":"recenter"}'
 
 
 def test_hello_names_this_app_by_default():
-    assert '"client":"HexR Window Tester"' in R.hello()
+    assert '"client":"HexR Companion"' in R.hello()
 
 
 # -- status and announcements ----------------------------------------------------
@@ -78,6 +80,7 @@ def test_reads_the_reference_status():
         == ("live", 47802, 1024, 1024, 1)
     assert s.commands == [("reset", "Reset demo")]
     assert s.allow_glove_control and s.allow_video and s.expose_scenes and s.controllers == 2
+    assert s.allow_recenter
 
 
 def test_reads_the_reference_announcement():
@@ -100,6 +103,8 @@ def test_a_status_missing_fields_still_reads():
                                                      {"hand": "neither"}]})
     assert s.gloves["left"].state == "connecting" and "neither" not in s.gloves
     assert s.stream.state == "off" and s.scene_index == -1 and s.scenes == []
+    # A headset before HexR 0.11.0 says nothing about recentering, and cannot do it.
+    assert s.allow_recenter is False
 
 
 def test_numbers_that_are_not_numbers_fall_back():
