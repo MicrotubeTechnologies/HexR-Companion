@@ -44,9 +44,9 @@ object T {
     /** Near-black, for labels sitting on an accent fill. */
     val ON_ACCENT = Color(0xFF140B04)
 
-    val GREEN = Color(0xFF4CD07D)         // connected, pass
-    val RED = Color(0xFFE8534A)           // disconnect, fail
-    val AMBER = Color(0xFFE8B13F)         // a channel that moved but not enough
+    val GREEN = Color(0xFF3ECF8E)         // connected, pass: the desktop's
+    val RED = Color(0xFFE5484D)           // disconnect, fail
+    val AMBER = Color(0xFFE8B04B)         // a channel that moved but not enough; low battery
 
     val R_CHIP = 8.dp
     val R_CARD = 10.dp

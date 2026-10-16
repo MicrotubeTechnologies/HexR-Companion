@@ -51,6 +51,8 @@ class BleEngine(
 ) {
     companion object {
         const val SCAN_MILLIS = 8_000L
+        const val MIN_SCAN_GAP_MS = 6_000L       // at most five starts in any thirty seconds
+        const val REPORT_EVERY_MS = 1_000L
         const val MIN_SEND_GAP_MS = 100L
 
         /** Enough for a 108-byte batch plus ATT overhead, with room to spare. */
@@ -111,6 +113,14 @@ class BleEngine(
     // -- scanning ------------------------------------------------------------
 
     private var scanCallback: ScanCallback? = null
+    private var scanGen = 0
+    private var lastScanStart = 0L
+
+    /**
+     * When the next search may start. Android quietly stops answering an app that starts more
+     * than five scans in thirty seconds, so starts are kept at least this far apart.
+     */
+    fun scanAllowedAt(): Long = lastScanStart + MIN_SCAN_GAP_MS
 
     /**
      * Stream discovered gloves to [onResult] as they arrive, then call
@@ -122,7 +132,7 @@ class BleEngine(
         // caller flips its own "scanning" flag before calling, so a path that
         // returns silently strands that flag set — and the Scan button then
         // reads "Scanning…" and stays disabled for the life of the process.
-        if (scanning) {
+        if (scanning || android.os.SystemClock.elapsedRealtime() < scanAllowedAt()) {
             onDone(null)
             return
         }
@@ -140,13 +150,17 @@ class BleEngine(
             return
         }
 
-        val seen = HashSet<String>()
+        // Each glove again at most once a second, with its signal now: the Connect screen shows
+        // live signal bars, and forgets a glove that has gone quiet.
+        val lastReport = HashMap<String, Long>()
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val name = result.scanRecord?.deviceName ?: runCatching { result.device.name }.getOrNull()
                 val hand = Protocol.handFromName(name) ?: return
                 val address = result.device.address
-                if (!seen.add(address)) return
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (now - (lastReport[address] ?: 0L) < REPORT_EVERY_MS) return
+                lastReport[address] = now
                 onResult(Found(address, name!!, hand, result.rssi))
             }
 
@@ -158,6 +172,8 @@ class BleEngine(
         }
         scanCallback = cb
         scanning = true
+        lastScanStart = android.os.SystemClock.elapsedRealtime()
+        val gen = ++scanGen
 
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -178,7 +194,8 @@ class BleEngine(
         // stopped it early, the caller still needs to hear that it is over.
         main.postDelayed({
             if (scanCallback === cb) stopScan()
-            onDone(bleError)
+            // A search stopped early and replaced by another says nothing about the new one.
+            if (gen == scanGen) onDone(bleError)
         }, SCAN_MILLIS)
     }
 
@@ -235,9 +252,13 @@ class BleEngine(
 
     fun sendHands(hands: Collection<String>, data: ByteArray) = hands.forEach { send(it, data) }
 
+    /**
+     * Vent every channel. Anything still waiting to be sent is dropped first: a Release all
+     * must never sit in the queue behind a drive that has not gone out yet.
+     */
     fun sendAllOff(hand: String? = null) {
         val targets = if (hand != null) listOf(hand) else sessions.keys.toList()
-        targets.forEach { send(it, Protocol.allOff()) }
+        targets.forEach { sessions[it]?.enqueue(Protocol.allOff(), purge = true) }
     }
 
     /**
@@ -279,9 +300,10 @@ class BleEngine(
 
         // -- queue ------------------------------------------------------------
 
-        fun enqueue(data: ByteArray) {
+        fun enqueue(data: ByteArray, purge: Boolean = false) {
             main.post {
                 if (closing && queue.isEmpty() && !busy) return@post
+                if (purge) queue.clear()
                 for (chunk in chunk(data)) queue.addLast(chunk)
                 pump()
             }

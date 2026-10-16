@@ -1,29 +1,38 @@
 package com.microtube.hexr.ui
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -33,279 +42,204 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.microtube.hexr.Found
+import com.microtube.hexr.GloveSearch
+import com.microtube.hexr.GloveSnapshot
 import com.microtube.hexr.HANDS
 import com.microtube.hexr.HexrViewModel
 import com.microtube.hexr.R
+import com.microtube.hexr.glove.GloveLook
+import com.microtube.hexr.glove.connectState
+import com.microtube.hexr.glove.panelSize
+import com.microtube.hexr.tr
+import kotlinx.coroutines.delay
 
 /**
- * Finding gloves and connecting them, in the two places the Test tab needs it.
+ * Connect: the Test tab until a glove connects, and the Gloves panel after.
  *
- * [ScanScreen] is the Test tab itself while no glove is connected: there is nothing to test
- * yet, so the one thing on screen is the way to get a glove. The moment one connects, the
- * tab turns into the test controls on its own. [GlovesPanel] is the same list behind the
- * Bluetooth button in the header once testing has started: the second glove, battery and
- * source pressure, MTU, Disconnect.
- *
- * A kit is a left glove and a right glove, and they are independent BLE peripherals. Both can
- * be connected at once and the rest of the app treats them separately throughout, so this is a
- * list you connect from rather than a chooser you pick one out of.
+ * Two gloves, left and right, dimmed until each is found and lit when it connects, the way the
+ * desktop's Connect screen shows them. It searches by itself while it is on screen; there is no
+ * Scan button. Under each glove one word says where it is, and one button does the next thing.
  */
 @Composable
-fun ScanScreen(vm: HexrViewModel, onOpenBluetoothSettings: () -> Unit) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(T.PAGE_PAD),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
+fun ConnectScreen(vm: HexrViewModel, panel: Boolean, onOpenBluetoothSettings: () -> Unit) {
+    DisposableEffect(Unit) {
+        vm.setConnectVisible(true)
+        onDispose { vm.setConnectVisible(false) }
+    }
+    var details by remember { mutableStateOf(false) }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val viewH = maxHeight.value
         Column(
-            Modifier.fillMaxWidth().padding(top = 28.dp, bottom = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = T.PAGE_PAD, vertical = 16.dp),
         ) {
-            ScanBeacon(scanning = vm.scanning)
-            VSpace(20)
-            Title("Connect a HEXR glove")
-            Caption(
-                "Switch on the arm module, then scan. Left and right are separate devices: " +
-                    "connect either, or both. Testing starts as soon as one connects.",
-                Modifier.padding(top = 6.dp),
-                T.TEXT_2,
-                textAlign = TextAlign.Center,
-            )
-        }
-
-        BluetoothOffCard(vm, onOpenBluetoothSettings)
-        ScanButton(vm, "Scan for HEXR", height = 56)
-        FoundList(vm)
-        GloveCards(vm)
-
-        BuildLine(vm)
-        VSpace(8)
-    }
-}
-
-/** Behind the header's Bluetooth button while testing. */
-@Composable
-fun GlovesPanel(vm: HexrViewModel, onOpenBluetoothSettings: () -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(T.PAGE_PAD),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        BluetoothOffCard(vm, onOpenBluetoothSettings)
-        ScanButton(vm, "Scan for gloves")
-        FoundList(vm)
-
-        val cards = GloveCards(vm)
-        if (vm.found.isEmpty() && !cards) {
-            Card(Modifier.fillMaxWidth()) {
-                EmptyNote("No gloves yet. Press scan with the arm module switched on.")
+            if (!panel) {
+                Text(tr("Connect a glove"), color = T.TEXT, fontSize = P.HEAD.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text(tr("Switch on the arm module."), color = T.TEXT_2, fontSize = P.BODY.sp)
+                Spacer(Modifier.height(16.dp))
             }
-        }
-
-        BuildLine(vm)
-        VSpace(8)
-    }
-}
-
-// -- pieces -------------------------------------------------------------------------
-
-/**
- * Permission is handled by the gate in front of the whole app, so the only thing scanning can
- * be blocked on is the radio, which the user can flip at any moment and which is otherwise
- * invisible.
- */
-@Composable
-private fun BluetoothOffCard(vm: HexrViewModel, onOpenBluetoothSettings: () -> Unit) {
-    if (vm.bluetoothOn) return
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Label("Bluetooth is switched off", weight = FontWeight.SemiBold)
-            Caption(
-                "Turn the phone's radio on and this clears on its own.",
-                Modifier.padding(top = 6.dp),
-                T.TEXT_2,
-            )
-            VSpace(14)
-            PrimaryButton(
-                "Open Bluetooth settings",
-                Modifier.fillMaxWidth(),
-                onClick = onOpenBluetoothSettings,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ScanButton(vm: HexrViewModel, label: String, height: Int = 50) {
-    Column {
-        PrimaryButton(
-            if (vm.scanning) "Scanning…" else label,
-            Modifier.fillMaxWidth(),
-            enabled = vm.bluetoothOn && !vm.scanning,
-            height = height,
-            onClick = vm::startScan,
-        )
-        Caption(
-            if (vm.bluetoothOn) vm.scanStatus else "Turn Bluetooth on first",
-            Modifier.padding(top = 10.dp),
-            if (vm.bluetoothOn) vm.scanTone.color() else T.TEXT_5,
-        )
-    }
-}
-
-@Composable
-private fun FoundList(vm: HexrViewModel) {
-    if (vm.found.isEmpty()) return
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        vm.found.forEach { f ->
-            val g = vm.gloves[f.hand]
-            val busy = g != null && (g.connected || g.connecting)
-            Card(
-                Modifier.fillMaxWidth(),
-                fill = T.CARD,
-                border = T.BORDER_SOFT,
-                radius = T.R_CARD,
-            ) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = !busy) { vm.connect(f) }
-                        .padding(horizontal = 14.dp, vertical = 13.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Dot(if (busy) T.TEXT_FAINT else T.GREEN, size = 7)
-                    Column(Modifier.weight(1f)) {
-                        Label(f.name, size = Size.BODY, weight = FontWeight.SemiBold)
-                        MonoText(
-                            f.address + (f.rssi?.let { " · $it dBm" } ?: ""),
-                            Modifier.padding(top = 2.dp),
-                            T.TEXT_5,
-                            Size.LABEL,
-                        )
-                    }
-                    Pill(f.hand)
-                    if (!busy) {
-                        Label(
-                            "Connect",
-                            color = T.ACCENT,
-                            size = Size.BODY_2,
-                            weight = FontWeight.SemiBold,
-                        )
+            if (!vm.bluetoothOn) {
+                BluetoothOff(onOpenBluetoothSettings)
+                Spacer(Modifier.height(16.dp))
+            }
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val slotW = (maxWidth.value - 12f) / 2
+                val unit = panelSize(1f, GloveLook.CONNECT)
+                val gh = minOf(slotW / unit.width, (viewH - if (panel) 190f else 260f) / unit.height).coerceIn(110f, 300f)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    for (hand in HANDS) {
+                        Slot(vm, hand, panel, gh, Modifier.weight(1f))
                     }
                 }
             }
-        }
-    }
-}
-
-/** A card per glove that is connected or connecting. Returns whether there was any. */
-@Composable
-private fun GloveCards(vm: HexrViewModel): Boolean {
-    val cards = HANDS.mapNotNull { vm.gloves[it] }.filter { it.connected || it.connecting }
-    if (cards.isEmpty()) return false
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionLabel("Connected")
-        cards.forEach { g ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(9.dp),
-                    ) {
-                        Label(
-                            "${g.hand} glove",
-                            Modifier.weight(1f),
-                            size = Size.BODY,
-                            weight = FontWeight.SemiBold,
-                        )
-                        when {
-                            g.connecting -> Pill("connecting", color = T.TEXT_2)
-                            g.live -> Pill(
-                                "streaming",
-                                color = T.GREEN,
-                                fill = T.GREEN.copy(alpha = 0.12f),
-                                border = T.GREEN.copy(alpha = 0.35f),
-                            )
-                            // Connected and usable — it simply is not
-                            // reporting pressure. Flagged quietly, not
-                            // as a fault: haptics work either way.
-                            g.connected -> Pill("connected", color = T.GREEN)
-                            else -> Pill(g.status, color = T.TEXT_2)
+            Spacer(Modifier.height(20.dp))
+            Disclosure(tr("Details"), details, onToggle = { details = !details }) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (hand in HANDS) {
+                        val g = vm.gloves[hand]
+                        val heard = vm.candidates(hand)
+                        val lines = buildList {
+                            if (g != null) {
+                                add("${tr(hand)}  ${g.address}  ${g.status}")
+                                if (g.connected) {
+                                    add("   " + tr("battery {level}", "level" to g.battery) +
+                                        "   " + tr("source {kpa} kPa", "kpa" to "%.1f".format(g.source)) +
+                                        "   MTU ${g.mtu ?: "?"}")
+                                }
+                            }
+                            for (f in heard) add("${tr(hand)}  ${f.address}  ${f.rssi ?: "?"} dBm")
                         }
+                        for (l in lines) MonoText(l, color = T.TEXT_4, size = 12.5f)
                     }
-
-                    VSpace(12)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatTile("Battery", g.battery, Modifier.weight(1f))
-                        StatTile(
-                            "Source kPa",
-                            if (g.live) "%.1f".format(g.source) else "—",
-                            Modifier.weight(1f),
-                        )
-                    }
-
-                    VSpace(10)
-                    MonoText(
-                        g.address + (g.mtu?.let { "   MTU $it" } ?: ""),
-                        color = T.TEXT_5,
-                        size = Size.LABEL,
-                    )
-                    if (g.mtu != null && g.mtu < SMALL_MTU) {
-                        Caption(
-                            "This glove kept a small MTU, so six-channel commands go " +
-                                "out as several writes instead of one.",
-                            Modifier.padding(top = 8.dp),
-                        )
-                    }
-
-                    VSpace(14)
-                    GhostButton(
-                        "Disconnect",
-                        Modifier.fillMaxWidth(),
-                        tint = T.RED,
-                        onClick = { vm.disconnect(g.hand) },
-                    )
+                    BuildLine(vm)
                 }
             }
         }
     }
-    return true
 }
 
-/**
- * The scan screen's centrepiece: the Bluetooth rune in a ring that breathes while a scan runs,
- * so a scan that is still going looks different from one that found nothing.
- */
+/** One glove: its picture, a word for where it is, and the one thing to do next. */
 @Composable
-private fun ScanBeacon(scanning: Boolean) {
-    val t = rememberInfiniteTransition(label = "beacon")
-    val pulse by t.animateFloat(
-        0f, 1f,
-        infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Restart),
-        label = "pulse",
+private fun Slot(vm: HexrViewModel, hand: String, panel: Boolean, gh: Float, modifier: Modifier) {
+    val g: GloveSnapshot? = vm.gloves[hand]
+    val heard = vm.candidates(hand)
+    val connected = g?.connected == true
+    val connecting = g?.connecting == true
+    val dim by animateFloatAsState(
+        when {
+            connected -> 1f
+            connecting -> .7f
+            heard.isNotEmpty() -> .6f
+            else -> .3f
+        },
+        tween(300), label = "dim",
     )
-    Box(Modifier.size(96.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.size(96.dp)) {
-            val c = Offset(size.width / 2f, size.height / 2f)
-            drawCircle(T.CARD, radius = size.width * 0.36f, center = c)
-            drawCircle(T.BORDER, radius = size.width * 0.36f, center = c, style = Stroke(1.dp.toPx()))
-            if (scanning) {
-                drawCircle(
-                    T.ACCENT.copy(alpha = 0.45f * (1f - pulse)),
-                    radius = size.width * (0.36f + 0.14f * pulse),
-                    center = c,
-                    style = Stroke(2.dp.toPx()),
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        GloveArt(
+            hand = hand, look = GloveLook.CONNECT, gh = gh.dp, dim = dim,
+            state = connectState(connected, if (g?.live == true) g.kpa else null),
+            description = tr(hand),
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(tr(hand), color = T.TEXT, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(4.dp))
+        Row(Modifier.heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+            val (word, dot) = when {
+                connected -> (tr("Connected") + if (g?.battery != "—") " · ${g?.battery}" else "") to
+                    if ((g?.batteryFraction ?: 1.0) < .2) T.AMBER else T.GREEN
+                connecting -> tr("Connecting…") to T.ACCENT
+                !vm.bluetoothOn || vm.scanError != null -> tr("Bluetooth unavailable") to T.RED
+                g?.failed == true && heard.isEmpty() -> tr("Could not connect") to T.RED
+                heard.isNotEmpty() -> tr("Found") to T.GREEN
+                else -> searchingWord() to T.TEXT_5
+            }
+            Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
+            Spacer(Modifier.size(6.dp))
+            Text(word, color = T.TEXT_2, fontSize = P.VALUE.sp, maxLines = 1)
+            if (!connected && !connecting && heard.isNotEmpty()) {
+                Spacer(Modifier.size(6.dp))
+                SignalBars(GloveSearch.signalBars(heard.first().rssi))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        when {
+            connected && panel -> ActionButton(
+                tr("Disconnect"), Modifier.widthIn(min = 132.dp), style = ActionStyle.Ghost,
+                height = P.TOUCH, onClick = { vm.disconnect(hand) },
+            )
+            connected -> Spacer(Modifier.height(P.TOUCH))
+            connecting -> ActionButton(
+                tr("Connecting…"), Modifier.widthIn(min = 132.dp), enabled = false, height = P.TOUCH, onClick = {},
+            )
+            vm.scanError != null && heard.isEmpty() -> ActionButton(
+                tr("Try again"), Modifier.widthIn(min = 132.dp), style = ActionStyle.Ghost,
+                height = P.TOUCH, onClick = vm::retryScan,
+            )
+            heard.isNotEmpty() -> ConnectButton(heard, onPick = vm::connect)
+            else -> Spacer(Modifier.height(P.TOUCH))
+        }
+    }
+}
+
+/** Connect, or with two kits of one hand about, a choice between them, strongest first. */
+@Composable
+private fun ConnectButton(heard: List<Found>, onPick: (Found) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        ActionButton(tr("Connect"), Modifier.widthIn(min = 132.dp), height = P.TOUCH, onClick = {
+            if (heard.size == 1) onPick(heard.first()) else open = true
+        })
+        DropdownMenu(open, onDismissRequest = { open = false }, containerColor = T.CARD) {
+            for (f in heard) {
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("${f.name} · ${GloveSearch.shortAddress(f.address)}", color = T.TEXT, fontSize = P.BODY.sp)
+                            Spacer(Modifier.size(10.dp))
+                            SignalBars(GloveSearch.signalBars(f.rssi))
+                        }
+                    },
+                    onClick = {
+                        open = false
+                        onPick(f)
+                    },
+                    modifier = Modifier.heightIn(min = P.TOUCH),
                 )
             }
         }
-        Canvas(Modifier.size(34.dp)) { drawBluetoothRune(if (scanning) T.ACCENT else T.TEXT) }
+    }
+}
+
+/** "Searching", with dots that count up, at a fixed width so the word does not shuffle. */
+@Composable
+private fun searchingWord(): String {
+    var dots by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(450)
+            dots = (dots + 1) % 4
+        }
+    }
+    return tr("Searching") + ".".repeat(dots) + " ".repeat(3 - dots)
+}
+
+@Composable
+private fun BluetoothOff(onOpenBluetoothSettings: () -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(tr("Bluetooth is off."), color = T.TEXT, fontSize = P.BODY.sp, fontWeight = FontWeight.SemiBold)
+            ActionButton(
+                tr("Open Bluetooth settings"), Modifier.fillMaxWidth(), style = ActionStyle.Ghost,
+                height = P.TOUCH, onClick = onOpenBluetoothSettings,
+            )
+        }
     }
 }
 
@@ -326,37 +260,19 @@ fun DrawScope.drawBluetoothRune(tint: Color) {
     drawPath(p, tint, style = Stroke(1.8f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
 
-/**
- * Build identity and the three flags that decide whether a scan can run.
- *
- * A QA tool that cannot say which build it is makes every bug report
- * ambiguous, and the scan gate in particular has several inputs that are
- * invisible from the outside. Small, muted, at the bottom — read when needed
- * and ignored otherwise.
- */
+/** Build identity and what decides whether a search can run, for a bug report. */
 @Composable
 private fun BuildLine(vm: HexrViewModel) {
     val ctx = LocalContext.current
     val version = remember {
-        runCatching {
-            ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName
-        }.getOrNull() ?: "?"
+        runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "?"
     }
     MonoText(
         "v$version·${stringResource(R.string.build_sha)}   " +
-            "permission ${yn(vm.permissionsGranted)}   " +
-            "bluetooth ${yn(vm.bluetoothOn)}   " +
-            "scanning ${yn(vm.scanning)}",
-        color = T.TEXT_FAINT,
-        size = Size.LABEL,
+            "permission ${yn(vm.permissionsGranted)}   bluetooth ${yn(vm.bluetoothOn)}   " +
+            "searching ${yn(vm.scanning)}",
+        color = T.TEXT_FAINT, size = 11.5f,
     )
 }
 
 private fun yn(b: Boolean) = if (b) "yes" else "no"
-
-/**
- * Below this, a 108-byte six-channel batch does not fit in one write and the
- * engine splits it. Worth surfacing: it changes how simultaneous the six
- * channels really are, which is exactly what the quick test measures.
- */
-private const val SMALL_MTU = 111

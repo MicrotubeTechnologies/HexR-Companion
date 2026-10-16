@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -75,18 +76,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.microtube.hexr.ui.Caption
-import com.microtube.hexr.ui.PrimaryButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import com.microtube.hexr.ui.ConnectScreen
 import com.microtube.hexr.ui.Dot
-import com.microtube.hexr.ui.GlovesPanel
+import com.microtube.hexr.ui.GlovesButton
 import com.microtube.hexr.ui.HeadsetsScreen
 import com.microtube.hexr.ui.HexrTheme
+import com.microtube.hexr.ui.PrimaryButton
 import com.microtube.hexr.ui.QuickTestScreen
-import com.microtube.hexr.ui.ScanScreen
 import com.microtube.hexr.ui.Size
 import com.microtube.hexr.ui.T
 import com.microtube.hexr.ui.TestScreen
-import com.microtube.hexr.ui.drawBluetoothRune
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
@@ -119,7 +121,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Light icons on the dark app, whatever the phone's own theme.
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
+        // English or Chinese: as picked last time, or on a first run as the phone is set.
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        I18n.language = prefs.getString(LANGUAGE, null)
+            ?: if (java.util.Locale.getDefault().language == "zh") I18n.ZH_CN else I18n.EN
         // Store screenshots, and nothing else. A debuggable build only, and
         // only when a scenario is named on the intent — there is no way here
         // from the UI, and no way at all from the build that goes to Play.
@@ -146,6 +156,11 @@ class MainActivity : ComponentActivity() {
                     onOpenBluetoothSettings = {
                         startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
                     },
+                    onLanguage = { code ->
+                        I18n.language = code
+                        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(LANGUAGE, code).apply()
+                    },
+                    onHelp = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GUIDE_URL))) },
                 )
             }
         }
@@ -176,7 +191,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        vm.setForeground(true)
         headsets.setForeground(true)
+    }
+
+    companion object {
+        private const val PREFS = "settings"
+        private const val LANGUAGE = "language"
+        private const val GUIDE_URL =
+            "https://github.com/MicrotubeTechnologies/HexR-Companion/blob/android-headsets/USER-GUIDE.md"
     }
 }
 
@@ -189,16 +212,19 @@ class MainActivity : ComponentActivity() {
  * that open them as panels over the controls.
  */
 private enum class Tab(val label: String) {
-    Test("Test"),
-    Headsets("Headsets"),
+    Test(N_("Test")),
+    Headsets(N_("Headsets")),
 }
 
 /** What is open over the Test tab, if anything. */
 private enum class Panel(val title: String) {
     None(""),
-    Gloves("Gloves"),
-    QuickTest("Quick test"),
+    Gloves(N_("Gloves")),
+    QuickTest(N_("Quick test")),
 }
+
+/** Marks English text that is translated where it is shown, not where it is written. */
+private fun N_(text: String) = text
 
 /** Where the app opens: a tab, and on the Test tab perhaps one of its panels. */
 private data class Start(val tab: Tab, val panel: Panel) {
@@ -223,6 +249,8 @@ private fun AppRoot(
     start: Start,
     onRequestPermissions: () -> Unit,
     onOpenBluetoothSettings: () -> Unit,
+    onLanguage: (String) -> Unit,
+    onHelp: () -> Unit,
 ) {
     // Saveable, so a rebuilt activity comes back where it was rather than on the Test tab with
     // the splash playing again (the manifest already keeps rotating and folding from rebuilding
@@ -266,10 +294,13 @@ private fun AppRoot(
     // vents a drive: otherwise every channel stays at full pressure behind a
     // screen that can no longer stop it.
     val closePanel = {
-        if (panel == Panel.QuickTest && vm.qtPhase in RUNNING_PHASES) vm.toggleQuickTest()
+        if (panel == Panel.QuickTest && vm.qtPhase in QT_RUNNING) vm.toggleQuickTest()
         panel = Panel.None
     }
     BackHandler(enabled = panel != Panel.None, onBack = closePanel)
+    // Back while something is on lets it go first, the phone's Escape: one press of Back must
+    // never leave a finger pressed behind a screen that has gone.
+    BackHandler(enabled = panel == Panel.None && tab == Tab.Test && vm.driving) { vm.release() }
 
     Box(Modifier.fillMaxSize().background(T.SCREEN)) {
         if (!vm.permissionsGranted) {
@@ -280,19 +311,9 @@ private fun AppRoot(
             topBar = {
                 if (!immersive) Header(
                     vm,
-                    actions = if (!testing) {
-                        null
-                    } else {
-                        {
-                            HeaderButton(
-                                label = "Quick test",
-                                description = "Quick test",
-                                glyph = { drawQuickTestGlyph(it) },
-                                onClick = { panel = Panel.QuickTest },
-                            )
-                            BluetoothButton(vm, onClick = { panel = Panel.Gloves })
-                        }
-                    },
+                    onGloves = { if (testing || tab != Tab.Test) panel = Panel.Gloves },
+                    onLanguage = onLanguage,
+                    onHelp = onHelp,
                 )
             },
             bottomBar = {
@@ -308,7 +329,11 @@ private fun AppRoot(
         ) { pad ->
             Box(Modifier.padding(pad).fillMaxSize()) {
                 when (tab) {
-                    Tab.Test -> if (anyGlove) TestScreen(vm) else ScanScreen(vm, onOpenBluetoothSettings)
+                    Tab.Test -> if (anyGlove) {
+                        TestScreen(vm, onQuickTest = { panel = Panel.QuickTest })
+                    } else {
+                        ConnectScreen(vm, panel = false, onOpenBluetoothSettings = onOpenBluetoothSettings)
+                    }
                     Tab.Headsets -> HeadsetsScreen(
                         headsets,
                         phoneGloves = HANDS.filter { vm.gloves[it]?.connected == true }.toSet(),
@@ -323,9 +348,9 @@ private fun AppRoot(
             enter = slideInVertically(tween(220)) { it / 10 } + fadeIn(tween(220)),
             exit = slideOutVertically(tween(180)) { it / 10 } + fadeOut(tween(180)),
         ) {
-            PanelSheet(shownPanel.title, onClose = closePanel) {
+            PanelSheet(tr(shownPanel.title), onClose = closePanel) {
                 when (shownPanel) {
-                    Panel.Gloves -> GlovesPanel(vm, onOpenBluetoothSettings)
+                    Panel.Gloves -> ConnectScreen(vm, panel = true, onOpenBluetoothSettings = onOpenBluetoothSettings)
                     Panel.QuickTest -> QuickTestScreen(vm)
                     Panel.None -> Unit
                 }
@@ -367,16 +392,14 @@ private fun PermissionGate(mustUseSettings: Boolean, onAction: () -> Unit) {
         Canvas(Modifier.size(56.dp)) { drawMark(2.8.dp.toPx()) }
         Spacer(Modifier.height(24.dp))
         Text(
-            "Bluetooth access needed",
+            tr("Bluetooth access needed"),
             color = T.TEXT,
             fontSize = Size.TITLE.sp,
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            "HEXR Companion talks to the glove over Bluetooth. Everything in the app — " +
-                "connecting, driving a channel, the quick test — needs permission to find " +
-                "and connect to nearby devices.",
+            tr("HEXR Companion talks to the glove over Bluetooth, so it needs permission to find and connect to nearby devices."),
             color = T.TEXT_2,
             fontSize = Size.BODY.sp,
             lineHeight = 20.sp,
@@ -385,8 +408,7 @@ private fun PermissionGate(mustUseSettings: Boolean, onAction: () -> Unit) {
         if (mustUseSettings) {
             Spacer(Modifier.height(10.dp))
             Text(
-                "Android will not ask again from inside the app. Open its settings and " +
-                    "allow Nearby devices.",
+                tr("Android will not ask again from inside the app. Open its settings and allow Nearby devices."),
                 color = T.TEXT_5,
                 fontSize = Size.CAPTION.sp,
                 lineHeight = 18.sp,
@@ -395,7 +417,7 @@ private fun PermissionGate(mustUseSettings: Boolean, onAction: () -> Unit) {
         }
         Spacer(Modifier.height(28.dp))
         PrimaryButton(
-            if (mustUseSettings) "Open app settings" else "Allow Bluetooth",
+            if (mustUseSettings) tr("Open app settings") else tr("Allow Bluetooth"),
             Modifier.fillMaxWidth(),
             onClick = onAction,
         )
@@ -443,13 +465,10 @@ private fun Splash(modifier: Modifier = Modifier) {
         }
 
         Spacer(Modifier.height(22.dp))
-        Text(
-            "HEXR",
-            color = T.TEXT,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 1.6.sp,
-        )
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text("HEXR", color = T.ACCENT, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.6.sp)
+            Text(" Companion", color = T.TEXT, fontSize = 26.sp, fontWeight = FontWeight.Normal)
+        }
         Spacer(Modifier.height(6.dp))
         Text(
             "BY MICROTUBE TECHNOLOGIES",
@@ -464,70 +483,75 @@ private fun Splash(modifier: Modifier = Modifier) {
 // -- header ---------------------------------------------------------------------
 
 /**
- * The lockup: mark, wordmark, product tag, and either the connection state or, while testing,
- * the Quick test and Bluetooth buttons in its place. The Bluetooth button's dot says what the
- * state line would have, and there is not room on a phone for both.
- *
- * There is no All off here. Release all on the Test tab is the one stop, and
- * two buttons that both mean stop is one more thing to reason about in the
- * moment you least want to.
+ * The lockup and the one glove status, as on the desktop: the mark, "HEXR Companion", and on
+ * the right the gloves button (a dot for each hand, the battery) and ⋯ for the language and the
+ * guide. The gloves button opens the Gloves panel; on the Test tab with no glove there is
+ * nothing to open, the tab is already Connect.
  */
 @Composable
-private fun Header(vm: HexrViewModel, actions: (@Composable RowScope.() -> Unit)? = null) {
-    val connected = HANDS.filter { vm.gloves[it]?.connected == true }
+private fun Header(vm: HexrViewModel, onGloves: () -> Unit, onLanguage: (String) -> Unit, onHelp: () -> Unit) {
+    val dot = { hand: String ->
+        val g = vm.gloves[hand]
+        when {
+            g?.connected == true -> T.GREEN
+            g?.connecting == true -> T.ACCENT
+            else -> T.TEXT_FAINT
+        }
+    }
+    val lowest = HANDS.mapNotNull { vm.gloves[it]?.takeIf { g -> g.connected }?.batteryFraction }.minOrNull()
+    var menu by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().background(T.SCREEN)) {
         Box(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars))
         Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp)
-                // As tall as the buttons, so the header does not jump when testing starts.
-                .height(HEADER_BUTTON.dp),
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 6.dp).height(48.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Canvas(Modifier.size(22.dp)) { drawMark(1.65.dp.toPx()) }
-            Text(
-                "HEXR",
-                color = T.TEXT,
-                fontSize = Size.WORDMARK.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 0.5.sp,
-            )
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(T.CARD)
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
-            ) {
-                Text(
-                    "COMPANION",
-                    color = T.TEXT_3,
-                    fontSize = Size.TAG.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.9.sp,
-                )
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
+                Text("HEXR", color = T.ACCENT, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = .5.sp)
+                Text(" Companion", color = T.TEXT, fontSize = 18.sp, maxLines = 1)
             }
-            if (actions == null) {
-                Row(
-                    Modifier.padding(start = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+            GlovesButton(
+                left = dot(LEFT), right = dot(RIGHT),
+                battery = lowest?.let { "${Math.round(it * 100)}%" },
+                low = lowest != null && lowest < .2,
+                onClick = onGloves,
+            )
+            Box {
+                Box(
+                    Modifier.size(48.dp).clip(CircleShape).clickable(onClickLabel = tr("More")) { menu = true }
+                        .semantics { contentDescription = tr("More") },
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Dot(if (connected.isEmpty()) T.TEXT_FAINT else T.GREEN)
-                    Caption(
-                        when {
-                            vm.driving -> "driving"
-                            connected.isEmpty() -> "no glove"
-                            else -> connected.joinToString(" + ") { it.lowercase() }
+                    Canvas(Modifier.size(20.dp)) {
+                        for (k in 0 until 3) drawCircle(T.TEXT_2, 1.8.dp.toPx(), Offset(size.width / 2, size.height * (.2f + .3f * k)))
+                    }
+                }
+                DropdownMenu(menu, onDismissRequest = { menu = false }, containerColor = T.CARD) {
+                    for ((code, name) in listOf(I18n.EN to "English", I18n.ZH_CN to "中文")) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    (if (I18n.language == code) "✓  " else "     ") + name,
+                                    color = T.TEXT, fontSize = 15.sp,
+                                )
+                            },
+                            onClick = {
+                                menu = false
+                                onLanguage(code)
+                            },
+                        )
+                    }
+                    HorizontalDivider(color = T.BORDER)
+                    DropdownMenuItem(
+                        text = { Text(tr("Help"), color = T.TEXT, fontSize = 15.sp) },
+                        onClick = {
+                            menu = false
+                            onHelp()
                         },
-                        color = if (vm.driving) T.ACCENT else T.TEXT_2,
-                        size = Size.MICRO,
                     )
                 }
-            } else {
-                Spacer(Modifier.weight(1f))
-                actions()
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(T.BORDER_SOFT))
@@ -535,9 +559,6 @@ private fun Header(vm: HexrViewModel, actions: (@Composable RowScope.() -> Unit)
 }
 
 private const val HEADER_BUTTON = 34
-
-/** A quick test that is still driving every channel. */
-private val RUNNING_PHASES = setOf("settle", "drive")
 
 /** One of the header's buttons: a glyph, and a word when there is room for one. */
 @Composable
@@ -580,32 +601,6 @@ private fun HeaderButton(
 }
 
 /**
- * The gloves: what used to be the Connect tab, one tap away while testing. Its dot is the
- * connection state at a glance: green while a glove is connected, orange while a scan or a
- * connect is under way.
- */
-@Composable
-private fun BluetoothButton(vm: HexrViewModel, onClick: () -> Unit) {
-    val busy = vm.scanning || HANDS.any { vm.gloves[it]?.connecting == true }
-    val connected = HANDS.filter { vm.gloves[it]?.connected == true }
-    HeaderButton(
-        label = null,
-        description = if (connected.isEmpty()) {
-            "Gloves: none connected"
-        } else {
-            "Gloves: " + connected.joinToString(" and ") { it.lowercase() } + " connected"
-        },
-        glyph = { drawBluetoothRune(it) },
-        badge = when {
-            busy -> T.ACCENT
-            connected.isNotEmpty() -> T.GREEN
-            else -> null
-        },
-        onClick = onClick,
-    )
-}
-
-/**
  * A panel over the Test tab: Gloves or Quick test. Full screen, because both are things you
  * look at properly rather than glance at, with its own title and a close button; Back closes it
  * too. It takes every touch, so nothing reaches the controls underneath.
@@ -630,7 +625,7 @@ private fun PanelSheet(title: String, onClose: () -> Unit, content: @Composable 
                 fontSize = Size.TITLE.sp,
                 fontWeight = FontWeight.Bold,
             )
-            HeaderButton(label = null, description = "Close", glyph = { drawCloseGlyph(it) }, onClick = onClose)
+            HeaderButton(label = null, description = tr("Close"), glyph = { drawCloseGlyph(it) }, onClick = onClose)
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(T.BORDER_SOFT))
         Box(
@@ -674,33 +669,44 @@ private fun hexagonPath(cx: Float, cy: Float, r: Float): Path {
 
 @Composable
 private fun BottomBar(current: Tab, onPick: (Tab) -> Unit) {
+    // A phone on its side has height to spare for nothing: the tabs go to one line.
+    val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 480
     Column(Modifier.fillMaxWidth().background(T.SCREEN)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(T.BORDER_SOFT))
         Row(
             Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(vertical = 8.dp),
+                .padding(vertical = if (compact) 2.dp else 8.dp),
         ) {
             Tab.entries.forEach { t ->
                 val selected = t == current
                 val tint = if (selected) T.ACCENT else T.TEXT_4
-                Column(
-                    Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(T.R_CARD))
-                        .clickable { onPick(t) }
-                        .padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    Canvas(Modifier.size(20.dp)) { drawTabGlyph(t, tint) }
-                    Text(
-                        t.label,
-                        color = tint,
-                        fontSize = Size.LABEL.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                val item = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(T.R_CARD))
+                    .clickable { onPick(t) }
+                    .padding(vertical = 6.dp)
+                val glyph = @Composable { Canvas(Modifier.size(20.dp)) { drawTabGlyph(t, tint) } }
+                val label = @Composable {
+                    Text(tr(t.label), color = tint, fontSize = Size.LABEL.sp, fontWeight = FontWeight.SemiBold)
+                }
+                if (compact) {
+                    Row(item, horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        glyph()
+                        Spacer(Modifier.size(8.dp))
+                        label()
+                    }
+                } else {
+                    Column(
+                        item,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        glyph()
+                        label()
+                    }
                 }
             }
         }
@@ -735,19 +741,6 @@ private fun DrawScope.drawTabGlyph(tab: Tab, tint: Color) {
             drawCircle(tint, radius = 1.6f * u, center = Offset(13f * u, 10.2f * u))
         }
     }
-}
-
-/** Quick test: three channels at three different peaks. Was the Quick test tab's glyph. */
-private fun DrawScope.drawQuickTestGlyph(tint: Color) {
-    val u = size.width / 20f
-    listOf(Triple(4f, 10f, 6f), Triple(8.7f, 6f, 10f), Triple(13.4f, 12f, 4f))
-        .forEach { (x, y, h) ->
-            drawRect(
-                tint,
-                topLeft = Offset(x * u, y * u),
-                size = androidx.compose.ui.geometry.Size(2.6f * u, h * u),
-            )
-        }
 }
 
 /** Close: a cross, on the same grid. */
