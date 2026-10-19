@@ -252,8 +252,12 @@ Headsets tab's live view with the gloves lighting up beside it, and English and
 Chinese. Same package name, so it is an update to whatever is already on Play.
 
 1. **The bundle.** `gradle testDebugUnitTest bundleRelease` with the upload key
-   (or the `android-v1.2.0` tag in CI). The result is
-   `app/build/outputs/bundle/release/app-release.aab`, version code 10200.
+   (or the `android-v1.2.1` tag in CI). The result is
+   `app/build/outputs/bundle/release/app-release.aab`, version code 10201.
+   It goes out as **1.2.1**: a 1.2.0 bundle (10200) was uploaded to the Console
+   on 16 October, before the app linked its privacy policy, and Play never takes
+   a version code twice. Replace that bundle in the production release with this
+   one.
    Confirm the certificate with `keytool -printcert -jarfile` (valid to 2054).
 2. **Screenshots.** The five in [play/listing.md](play/listing.md), captured from
    the debug build's demo scenarios; the old ones show a design that is gone.
