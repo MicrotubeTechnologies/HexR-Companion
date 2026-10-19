@@ -304,7 +304,9 @@ def open_video(path: str, size: tuple[int, int], rate: int = 30):
     stream.time_base = TIME_BASE
     stream.codec_context.time_base = TIME_BASE
     if stream.codec_context.name == "libx264":
-        stream.options = {"crf": "20", "preset": "veryfast"}
+        # No B-frames: with them the MP4 opens the picture with an edit list, which many players
+        # (Windows' own among them) skip, showing the picture late against the sound.
+        stream.options = {"crf": "20", "preset": "veryfast", "bf": "0"}
     else:
         stream.bit_rate = 8_000_000
     return container, stream
@@ -322,15 +324,35 @@ def open_sound(container, rate: int, channels: int):
 def encode_sound(container, stream, frame, at: int, next_at: int) -> int:
     """One piece of decoded sound into `stream` at sample `at`; returns where the sound has got to.
 
-    A piece that would overlap what is written by more than half its length is dropped (sound from
-    before the recording began, or a step back in the headset's stamps); a smaller overlap is
-    moved along to follow on. A gap stays a gap: something the headset did not play.
+    The sound is written without a gap, each piece following on from the last, so it lines up with
+    the picture in every player. A piece that would overlap what is written by more than half its
+    length is dropped (sound from before the recording began, or a step back in the headset's
+    stamps); a smaller overlap or gap is closed up. A longer gap, before the sound came or where
+    the headset sent none, is filled with silence. Left as a gap in the stamps, or as the empty
+    edit that starts a track late, it is skipped by many players (Windows' own among them), which
+    then play everything after it early.
     """
-    if at < next_at - frame.samples // 2:
+    half = frame.samples // 2
+    if at < next_at - half:
         return next_at
-    at = max(at, next_at)
+    while at - next_at > half:
+        next_at = _write_sound(container, stream, _silence_like(frame), next_at)
+    return _write_sound(container, stream, frame, next_at)
+
+
+def _write_sound(container, stream, frame, at: int) -> int:
     frame.pts = at
     frame.time_base = Fraction(1, stream.codec_context.sample_rate)
     for packet in stream.encode(frame):
         container.mux(packet)
     return at + frame.samples
+
+
+def _silence_like(frame):
+    """A silent piece the shape of `frame`."""
+    import av
+    quiet = av.AudioFrame(format=frame.format.name, layout=frame.layout.name, samples=frame.samples)
+    quiet.sample_rate = frame.sample_rate
+    for plane in quiet.planes:
+        plane.update(bytes(plane.buffer_size))
+    return quiet

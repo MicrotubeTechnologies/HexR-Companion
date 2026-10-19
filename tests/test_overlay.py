@@ -301,9 +301,9 @@ def _piece(start_s: float):
     return frame
 
 
-def _record_with_sound(folder: str):
-    """1.5 s of pretend view and its sound, the sound starting 0.2 s before the first frame (as it
-    does when Record is pressed mid-stream); returns the recorder."""
+def _record_with_sound(folder: str, sound_from: float = -0.2):
+    """1.5 s of pretend view and its sound, the sound starting `sound_from` s from the first frame
+    (by default 0.2 s before it, as when Record is pressed mid-stream); returns the recorder."""
     av = pytest.importorskip("av")
     from hexr.recorder import Recorder
     done = []
@@ -313,8 +313,8 @@ def _record_with_sound(folder: str):
     k = 0
     for i in range(45):                 # 1.5 s at 30 fps
         # The sound up to this frame, each piece stamped on the headset's clock like the frames.
-        while -0.2 + k * PIECE / RATE <= i / 30:
-            start = -0.2 + k * PIECE / RATE
+        while sound_from + k * PIECE / RATE <= i / 30:
+            start = sound_from + k * PIECE / RATE
             rec.tap_sound(_piece(start), int((T0 + start) * US))
             k += 1
         frame = av.VideoFrame.from_image(Image.new("RGB", (64, 64), (40, 40, 90)))
@@ -354,6 +354,68 @@ def test_a_recording_has_the_sound_where_the_headset_played_it():
         assert _beep_starts(rec.path) == pytest.approx(BEEP_AT, abs=0.025)
 
 
+def test_sound_that_comes_late_is_led_in_with_silence():
+    # Sound that joins after the view (its connection still opening when Record was pressed) is
+    # not left to an MP4 edit list to place: players that skip one play it early, by as long as it
+    # was late. The track starts with the picture, silent until the sound came.
+    av = pytest.importorskip("av")
+    with tempfile.TemporaryDirectory() as folder:
+        rec = _record_with_sound(folder, sound_from=0.3)
+        assert rec.error == ""
+        with av.open(rec.path) as clip:
+            sound = clip.streams.audio[0]
+            assert float(sound.start_time * sound.time_base) <= 0.025
+            assert float(sound.duration * sound.time_base) == pytest.approx(1.5, abs=0.1)
+        assert _beep_starts(rec.path) == pytest.approx(BEEP_AT, abs=0.025)
+
+
+def _gap_left_in_the_stamps(container, stream, frame, at, next_at):
+    """encode_sound as 0.6.0 had it, which left a gap as a gap: recordings made then have one."""
+    from fractions import Fraction
+    if at < next_at - frame.samples // 2:
+        return next_at
+    at = max(at, next_at)
+    frame.pts = at
+    frame.time_base = Fraction(1, stream.codec_context.sample_rate)
+    for packet in stream.encode(frame):
+        container.mux(packet)
+    return at + frame.samples
+
+
+def test_an_export_of_a_recording_whose_sound_came_late_is_in_step_in_any_player(monkeypatch):
+    av = pytest.importorskip("av")
+    from hexr import exporter as X
+    from hexr import recorder as REC
+    with tempfile.TemporaryDirectory() as folder:
+        monkeypatch.setenv("HEXR_VIDEOS", folder)
+        fixed = REC.encode_sound
+        monkeypatch.setattr(REC, "encode_sound", _gap_left_in_the_stamps)
+        rec = _record_with_sound(folder, sound_from=0.3)
+        monkeypatch.setattr(REC, "encode_sound", fixed)
+        with av.open(rec.path) as clip:     # the sound starts late, by an edit list
+            sound = clip.streams.audio[0]
+            assert float(sound.start_time * sound.time_base) == pytest.approx(0.3, abs=0.03)
+        job = X.Export(X.find_recordings(folder)[0], V.LANDSCAPE)
+        job.start()
+        job._thread.join(60)
+        assert job.done and job.error == ""
+        with av.open(job.path) as clip:
+            sound = clip.streams.audio[0]
+            assert float(sound.start_time * sound.time_base) <= 0.025
+        assert _beep_starts(job.path) == pytest.approx(BEEP_AT, abs=0.025)
+
+
+def test_the_view_is_stored_in_the_order_it_shows():
+    # B-frames would make the MP4 open the picture with an edit list too, which the same players
+    # skip, so the picture would come late against the sound.
+    av = pytest.importorskip("av")
+    with tempfile.TemporaryDirectory() as folder:
+        rec = _record(folder)
+        with av.open(rec.path) as clip:
+            view = clip.streams.video[0]
+            assert all(p.pts == p.dts for p in clip.demux(view) if p.pts is not None)
+
+
 def test_a_recording_without_sound_has_no_sound_track():
     av = pytest.importorskip("av")
     with tempfile.TemporaryDirectory() as folder:
@@ -388,7 +450,7 @@ def test_sound_that_steps_back_does_not_overlap_what_is_written():
         assert at == PIECE
         assert REC.encode_sound(container, stream, _piece(0), at - 100, at) == 2 * PIECE  # moved on
         assert REC.encode_sound(container, stream, _piece(0), 0, 2 * PIECE) == 2 * PIECE  # dropped
-        assert REC.encode_sound(container, stream, _piece(0), 5 * PIECE, 2 * PIECE) == 6 * PIECE
+        assert REC.encode_sound(container, stream, _piece(0), 5 * PIECE, 2 * PIECE) == 6 * PIECE  # gap filled
         for packet in stream.encode(None):
             container.mux(packet)
         container.close()
