@@ -6,13 +6,12 @@ published copy is `docs/privacy.html`, served by GitHub Pages at
 
     https://microtubetechnologies.github.io/HexR-Companion/privacy.html
 
-The two are maintained by hand and must be edited together. Have whoever signs
-off on company copy read this before the first submission — in particular the
-contact address, which is currently the repository's issue tracker rather than a
-company mailbox.
+The two are maintained by hand and must be edited together. The published copy
+goes live when it reaches `main`. The app opens it from **Privacy policy** in
+its ⋮ menu, as Play requires.
 
 Package: `com.microtube.hexr.tester`
-Last updated: 14 October 2026
+Last updated: 19 October 2026
 
 ---
 
@@ -35,11 +34,12 @@ Gloves are reached over Bluetooth LE, on the bench in front of you.
 
 The Headsets tab talks to HEXR headsets on the same Wi-Fi network as the phone,
 and to nothing else. It listens for headsets announcing themselves, sends them
-the commands you give (connect or disconnect a glove, change scene), and reads
-back their status. When the person wearing a headset agrees to it in the
-headset, the tab also receives that headset's view as video and shows it on
-screen; the video is not recorded or stored. None of this goes to Microtube or
-to anyone else: the app contacts no server on the internet.
+the commands you give (such as connecting or disconnecting a glove, or
+recentering the view), and reads back their status. When the person wearing a
+headset agrees to it in the headset, the tab also receives that headset's view
+as video, and what its gloves are doing, and shows them on screen; neither is
+recorded or stored. None of this goes to Microtube or to anyone else: the app
+contacts no server on the internet.
 
 Android calls the permission to open any network connection, including one that
 never leaves the room, the internet permission, so the app declares it. See
@@ -87,10 +87,5 @@ updated.
 
 ## Contact
 
-Questions about this policy: open an issue at
+Questions about this policy: email <info@microtube.tech>, or open an issue at
 <https://github.com/MicrotubeTechnologies/HexR-Companion/issues>.
-
-A monitored company address would be better here, and should replace this before
-the listing goes to production. The issue tracker is public, is read, and is a
-real channel — which is what Play requires — but it is not what a customer
-expects to find on a privacy policy.

@@ -89,6 +89,7 @@ internal val ZH: Map<String, String> = mapOf(
     "Headsets" to "头显",
     "Gloves" to "手套",
     "Help" to "帮助",
+    "Privacy policy" to "隐私政策",
     "More" to "更多",
     "Close" to "关闭",
     "Bluetooth access needed" to "需要蓝牙权限",

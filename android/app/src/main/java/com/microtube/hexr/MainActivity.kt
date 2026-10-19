@@ -167,6 +167,7 @@ class MainActivity : ComponentActivity() {
                         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(LANGUAGE, code).apply()
                     },
                     onHelp = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GUIDE_URL))) },
+                    onPrivacy = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL))) },
                 )
             }
         }
@@ -206,6 +207,8 @@ class MainActivity : ComponentActivity() {
         private const val LANGUAGE = "language"
         private const val GUIDE_URL =
             "https://github.com/MicrotubeTechnologies/HexR-Companion/blob/android-headsets/android/USER-GUIDE.md"
+        // The policy Play links to from the listing; Play wants it reachable from the app too.
+        private const val PRIVACY_URL = "https://microtubetechnologies.github.io/HexR-Companion/privacy.html"
     }
 }
 
@@ -257,6 +260,7 @@ private fun AppRoot(
     onOpenBluetoothSettings: () -> Unit,
     onLanguage: (String) -> Unit,
     onHelp: () -> Unit,
+    onPrivacy: () -> Unit,
 ) {
     // Saveable, so a rebuilt activity comes back where it was rather than on the Test tab with
     // the splash playing again (the manifest already keeps rotating and folding from rebuilding
@@ -320,6 +324,7 @@ private fun AppRoot(
                     onGloves = { if (testing || tab != Tab.Test) panel = Panel.Gloves },
                     onLanguage = onLanguage,
                     onHelp = onHelp,
+                    onPrivacy = onPrivacy,
                 )
             },
             bottomBar = {
@@ -495,7 +500,13 @@ private fun Splash(modifier: Modifier = Modifier) {
  * nothing to open, the tab is already Connect.
  */
 @Composable
-private fun Header(vm: HexrViewModel, onGloves: () -> Unit, onLanguage: (String) -> Unit, onHelp: () -> Unit) {
+private fun Header(
+    vm: HexrViewModel,
+    onGloves: () -> Unit,
+    onLanguage: (String) -> Unit,
+    onHelp: () -> Unit,
+    onPrivacy: () -> Unit,
+) {
     val dot = { hand: String ->
         val g = vm.gloves[hand]
         when {
@@ -555,6 +566,13 @@ private fun Header(vm: HexrViewModel, onGloves: () -> Unit, onLanguage: (String)
                         onClick = {
                             menu = false
                             onHelp()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(tr("Privacy policy"), color = T.TEXT, fontSize = 15.sp) },
+                        onClick = {
+                            menu = false
+                            onPrivacy()
                         },
                     )
                 }

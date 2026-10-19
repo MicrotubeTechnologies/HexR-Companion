@@ -187,8 +187,11 @@ https://microtubetechnologies.github.io/HexR-Companion/privacy.html
 
 It is live, served from `docs/` on `main`. A change to the policy goes live when
 it reaches `main`; check it loads before pasting it into the Console. [PRIVACY.md](PRIVACY.md) is
-the source text; the contact line currently points at the repository's issue
-tracker, which is a real channel but not the company mailbox a customer expects.
+the source text. Its contact is info@microtube.tech, the address on the company
+website, with the repository's issue tracker as a second channel.
+
+Play also wants the policy linked from inside the app. From 1.2.0 it is
+**Privacy policy** in the ⋮ menu, under Help, and opens the same URL.
 
 **Store listing text and graphics.** All of it is written out in
 [play/listing.md](play/listing.md) — name, short and full descriptions with
@@ -259,7 +262,10 @@ Chinese. Same package name, so it is an update to whatever is already on Play.
    description still mentions switching scenes, which the app no longer does.
 4. **App access.** Replace the reviewer video if it shows the old screens.
 5. **Data safety.** Unchanged: nothing collected or shared. The language picked
-   is now stored on the phone too, which the privacy policy says; that change
-   goes live when `docs/privacy.html` reaches `main`.
-6. **Track.** Internal testing first; install from the Play link on a phone with a
+   is now stored on the phone too, which the privacy policy says (live since
+   19 October 2026, with the gloves shown beside the view and the company
+   contact).
+6. **Privacy policy.** The URL above, unchanged. The app links to it from its
+   ⋮ menu, which is what the Console's "within your app" means.
+7. **Track.** Internal testing first; install from the Play link on a phone with a
    glove and a headset to hand, then promote.

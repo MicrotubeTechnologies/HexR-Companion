@@ -202,8 +202,9 @@ jobs:
             ${{ steps.files.outputs.apk_sha256 }}
             ```
 
-            Provided as-is, without warranty of any kind. The app makes no
-            network connections and collects no data.
+            Provided as-is, without warranty of any kind. The app collects no
+            data, and connects to nothing beyond the gloves and the headsets on
+            your own Wi-Fi.
           files: |
             android/out/HexR-Companion.apk
             android/out/SHA256SUMS.txt
