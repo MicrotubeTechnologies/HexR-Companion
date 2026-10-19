@@ -259,6 +259,7 @@ class _Detail(tk.Frame):
         self.app = screen.app
         self.key = key
         self.video: R.VideoReceiver | None = None
+        self.sound: R.AudioReceiver | None = None
         self._photo = None
         self._title = ""
         self._nickname = ""
@@ -341,6 +342,7 @@ class _Detail(tk.Frame):
         self._view_wanted = False
         self._aspect = 1.0
         self._video_retry_at = 0.0
+        self._sound_retry_at = 0.0
         self._last_stream = R.StreamState()
         self._unavailable = R.video_available()
         self._fit = self._inline_fit()
@@ -417,6 +419,16 @@ class _Detail(tk.Frame):
                          (tr(" · {n} watching", n=st.viewers) if st.viewers else ""))
         if st.message:
             lines.append(st.message)
+        if st.state == "live":
+            a = st.audio
+            if a.state == "live":
+                lines.append(tr("Sound shared") if not (self.sound and self.sound.message)
+                             else self.sound.message)
+            elif a.message:
+                lines.append(a.message)
+            elif a.state == "off":
+                lines.append(tr("This app sends no sound. Update it to HexR 0.10.5 or newer to "
+                                "record its sound."))
         if self.video and self.video.state == "playing" and not self.timeline.exact:
             lines.append(tr("The glove shows the pressure the gloves measure. Update this app to "
                             "HexR 0.10.2 or newer to show every touch and vibration as it is sent."))
@@ -577,6 +589,7 @@ class _Detail(tk.Frame):
             old.stop()
         if not live and self.video is not None and st.state != "requesting":
             self._stop_video()
+        self._update_sound(r, st.audio)
         self._update_recording()
 
         playing = bool(self.video and self.video.state == "playing")
@@ -632,6 +645,27 @@ class _Detail(tk.Frame):
         self.say.configure(text=text, wraplength=int((x1 - x0) * .8))
         self.say.place(in_=self.screen, x=(x0 + x1) // 2, y=(y0 + y1) // 2, anchor="center")
         self.say.lift(self.screen)
+
+    def _update_sound(self, r: HeadsetRow, a: R.AudioState):
+        """The app's sound, beside the view while there is one, for a recording to take."""
+        if self.video is None or a.state != "live" or a.port <= 0:
+            self._stop_sound()
+            return
+        if self.sound is None:
+            self.sound = R.AudioReceiver(r.host, a.port)
+        elif self.sound.state in ("failed", "ended") and \
+                time.monotonic() - self._sound_retry_at > VIDEO_RETRY_S:
+            # As with the view: join again, a recording going on carrying over.
+            self._sound_retry_at = time.monotonic()
+            old = self.sound
+            self.sound = R.AudioReceiver(r.host, a.port)
+            self.sound.taps = old.taps
+            old.stop()
+
+    def _stop_sound(self):
+        if self.sound:
+            self.sound.stop()
+            self.sound = None
 
     # -- drawing the view -------------------------------------------------------------------------
 
@@ -708,13 +742,19 @@ class _Detail(tk.Frame):
             self.notice.configure(text=tr("Recording failed: {error}", error=e))
             self.notice.pack(fill="x", pady=(8, 0), after=self.rec_btn.master)
             return
+        a = self._last_stream.audio
+        hears = bool(self.sound and self.sound.state in ("connecting", "playing") and
+                     a.sample_rate > 0)
         rec = REC.Recorder(path, self.timeline, lambda: self.compositor.badges,
-                           title=self._title)
+                           title=self._title,
+                           sound=(a.sample_rate, max(1, a.channels)) if hears else None)
         self.recorder = rec
         self._saved = None
         self.saved_link.pack_forget()
         rec.start()
         self.video.taps.append(rec.tap)
+        if hears:
+            self.sound.taps.append(rec.tap_sound)
         self._update_recording()
 
     def _stop_record(self):
@@ -723,6 +763,8 @@ class _Detail(tk.Frame):
             return
         if self.video and rec.tap in self.video.taps:
             self.video.taps.remove(rec.tap)
+        if self.sound and rec.tap_sound in self.sound.taps:
+            self.sound.taps.remove(rec.tap_sound)
         rec.stop()
         self._saving = rec
         self._update_recording()
@@ -766,6 +808,7 @@ class _Detail(tk.Frame):
         if self.video:
             self.video.stop()
             self.video = None
+        self._stop_sound()
         self._photo = None
 
     def destroy(self):

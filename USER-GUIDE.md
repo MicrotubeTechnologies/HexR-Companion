@@ -310,11 +310,19 @@ middle of it, keeping its lower part, where hands are.
   front, for someone who has wandered off or was handed the headset facing the
   wrong way. Works on Quest and PICO alike. A tick shows it worked. The app
   needs **HexR 0.11.0 or newer**; on an older one the button is greyed out.
-- **Record** — records the view and what the gloves did, in
+- **Record** — records the view, the app's sound and what the gloves did, in
   *Videos\HEXR Companion\Recordings*. While it records the button shows the
   time; when it stops, **Open in Recordings** takes you to it, to export it as
   a video (below). With a HexR 0.10.2 app a *.haptics.json* is saved beside it
   too, which HexR Overlay Studio opens.
+
+  The sound needs the app built with **HexR 0.10.5 or newer** and its Share
+  Sound setting on. It is only the app's own sound, never the headset's
+  microphone, but Android asks the wearer once, the first time, to allow the
+  microphone all the same, just before the screen-sharing prompt: they choose
+  **Allow**. A wearer who says no still shares the view, and the recording has
+  no sound; **Details** says why. You hear nothing on this computer while you
+  watch: the sound goes into the recording.
 - **Full screen** — the **⛶** button, or double-click the view. The picture
   alone, on a second display if one is connected (a projector or TV), or on
   this one. **Esc** leaves and **R** records.
@@ -342,7 +350,7 @@ video to share.
 1. **Pick a recording** in the list. The player above the shapes opens on the
    moment the gloves were busiest. **▶** plays it from the start, exactly as
    the export will look; click the picture to pause, and drag the bar to move
-   through it.
+   through it. The player is silent; the exported video has the sound.
 2. **Pick a shape.** The player switches to it straight away.
 
    | Shape | Size | For |

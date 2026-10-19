@@ -3,8 +3,8 @@ chosen, at the speed it happened.
 
 Decoding and drawing happen on the player's own thread, paced to the clock; the Recordings
 screen takes the newest picture when it draws. A player that falls behind skips drawing frames
-rather than slowing down. Changing the shape redraws the frame shown. No sound: a headset's view
-has none. No Tk.
+rather than slowing down. Changing the shape redraws the frame shown. It plays no sound: a
+recording's sound, when the headset shared it, is in the exported video. No Tk.
 """
 
 from __future__ import annotations

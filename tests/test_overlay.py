@@ -278,6 +278,122 @@ def test_a_recording_exports_in_each_shape(layout, monkeypatch):
         assert rec.frames == 45
 
 
+# -- sound (HexR 0.10.5 and later) ----------------------------------------------------------------
+
+RATE = 48000
+PIECE = 1024                            # samples in one piece, as AAC decodes
+BEEP_AT = 0.5                           # seconds into the recording
+
+
+def _piece(start_s: float):
+    """One decoded piece of a headset's sound, 48 kHz stereo, starting `start_s` into the
+    recording: silent, except for a 660 Hz beep from BEEP_AT."""
+    import math
+    from array import array
+    av = pytest.importorskip("av")
+    frame = av.AudioFrame(format="fltp", layout="stereo", samples=PIECE)
+    frame.sample_rate = RATE
+    t0 = start_s
+    tone = array("f", (0.5 * math.sin(2 * math.pi * 660 * (t0 + n / RATE))
+                       if t0 + n / RATE >= BEEP_AT else 0.0 for n in range(PIECE))).tobytes()
+    for plane in frame.planes:
+        plane.update(tone)
+    return frame
+
+
+def _record_with_sound(folder: str):
+    """1.5 s of pretend view and its sound, the sound starting 0.2 s before the first frame (as it
+    does when Record is pressed mid-stream); returns the recorder."""
+    av = pytest.importorskip("av")
+    from hexr.recorder import Recorder
+    done = []
+    rec = Recorder(os.path.join(folder, "clip.mp4"), HP.HapticsTimeline(), lambda: (),
+                   done.append, "Quest 3", sound=(RATE, 2))
+    rec.start()
+    k = 0
+    for i in range(45):                 # 1.5 s at 30 fps
+        # The sound up to this frame, each piece stamped on the headset's clock like the frames.
+        while -0.2 + k * PIECE / RATE <= i / 30:
+            start = -0.2 + k * PIECE / RATE
+            rec.tap_sound(_piece(start), int((T0 + start) * US))
+            k += 1
+        frame = av.VideoFrame.from_image(Image.new("RGB", (64, 64), (40, 40, 90)))
+        rec.tap(frame, int((T0 + i / 30) * US), 0.0)
+    rec.stop()
+    for _ in range(200):
+        if done:
+            break
+        time.sleep(0.05)
+    return rec
+
+
+def _beep_starts(path: str) -> float:
+    """When the sound in a video first gets loud, in seconds."""
+    av = pytest.importorskip("av")
+    from array import array
+    with av.open(path) as clip:
+        for frame in clip.decode(clip.streams.audio[0]):
+            left = array("f", bytes(frame.planes[0]))[:frame.samples]
+            for n, v in enumerate(left):
+                if abs(v) > 0.1:
+                    return float(frame.time) + n / frame.sample_rate
+    return -1.0
+
+
+def test_a_recording_has_the_sound_where_the_headset_played_it():
+    av = pytest.importorskip("av")
+    with tempfile.TemporaryDirectory() as folder:
+        rec = _record_with_sound(folder)
+        assert rec.error == "" and rec.frames == 45 and rec.sound_dropped == 0
+        with av.open(rec.path) as clip:
+            sound = clip.streams.audio[0]
+            assert (sound.codec_context.name, sound.codec_context.sample_rate,
+                    sound.codec_context.channels) == ("aac", RATE, 2)
+            assert float(sound.duration * sound.time_base) == pytest.approx(1.5, abs=0.1)
+        # The 0.2 s before the first frame is left out, so the beep is where it played.
+        assert _beep_starts(rec.path) == pytest.approx(BEEP_AT, abs=0.025)
+
+
+def test_a_recording_without_sound_has_no_sound_track():
+    av = pytest.importorskip("av")
+    with tempfile.TemporaryDirectory() as folder:
+        rec = _record(folder)
+        with av.open(rec.path) as clip:
+            assert rec.sound is None and not clip.streams.audio
+
+
+@pytest.mark.parametrize("layout", [V.LANDSCAPE, V.PORTRAIT, V.VIEW])
+def test_an_export_keeps_the_sound_in_step(layout, monkeypatch):
+    av = pytest.importorskip("av")
+    from hexr import exporter as X
+    with tempfile.TemporaryDirectory() as folder:
+        monkeypatch.setenv("HEXR_VIDEOS", folder)
+        _record_with_sound(folder)
+        job = X.Export(X.find_recordings(folder)[0], layout)
+        job.start()
+        job._thread.join(60)
+        assert job.done and job.error == ""
+        with av.open(job.path) as clip:
+            assert clip.streams.audio and clip.streams.video
+        assert _beep_starts(job.path) == pytest.approx(BEEP_AT, abs=0.025)
+
+
+def test_sound_that_steps_back_does_not_overlap_what_is_written():
+    av = pytest.importorskip("av")
+    from hexr import recorder as REC
+    with tempfile.TemporaryDirectory() as folder:
+        container = av.open(os.path.join(folder, "s.mp4"), "w")
+        stream = REC.open_sound(container, RATE, 2)
+        at = REC.encode_sound(container, stream, _piece(0), 0, 0)
+        assert at == PIECE
+        assert REC.encode_sound(container, stream, _piece(0), at - 100, at) == 2 * PIECE  # moved on
+        assert REC.encode_sound(container, stream, _piece(0), 0, 2 * PIECE) == 2 * PIECE  # dropped
+        assert REC.encode_sound(container, stream, _piece(0), 5 * PIECE, 2 * PIECE) == 6 * PIECE
+        for packet in stream.encode(None):
+            container.mux(packet)
+        container.close()
+
+
 def _wait(condition, seconds=5.0):
     end = time.monotonic() + seconds
     while time.monotonic() < end:

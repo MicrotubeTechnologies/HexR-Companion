@@ -1,9 +1,10 @@
 """A recording, made into a video to share: the view beside its gloves, in landscape (16:9) or
 portrait (9:16), YouTube's two shapes, or the view alone, in its own shape.
 
-A recording is the headset's view as it came and a .gloves.jsonl of what the gloves did
-(hexr/recorder.py). An export draws the two together a frame at a time (hexr/viewer.py), on a
-thread of its own, and can be stopped. The same recording can be exported in every shape, as
+A recording is the headset's view as it came, with its sound when the headset shared it, and a
+.gloves.jsonl of what the gloves did (hexr/recorder.py). An export draws the view and the gloves
+together a frame at a time (hexr/viewer.py), with the sound under them, on a thread of its own,
+and can be stopped. The same recording can be exported in every shape, as
 often as wanted. No Tk.
 """
 
@@ -159,30 +160,44 @@ class Export:
             compositor = Compositor()
             with av.open(self.rec.path) as src:
                 vs = src.streams.video[0]
+                # The headset's sound, in a recording that has it (HexR 0.10.5 and later).
+                heard = src.streams.audio[0] if src.streams.audio else None
                 total = float(vs.duration * vs.time_base) if vs.duration else \
                     (src.duration or 0) / 1e6
                 size = frame_size(None, self.layout, vs.codec_context.width /
                                   max(1, vs.codec_context.height))
                 container, stream = REC.open_video(self.path, size)
+                sound = REC.open_sound(container, heard.codec_context.sample_rate,
+                                       heard.codec_context.channels) if heard else None
+                sound_next = 0
                 last_pts = -1
-                for frame in src.decode(vs):
+                for packet in src.demux(*[s for s in (vs, heard) if s is not None]):
                     if self._stop.is_set():
                         break
-                    t = float(frame.time or 0.0)
-                    states, badges = track.at(t)
-                    img = compositor.draw(frame, states, badges, self.layout)
-                    out = to_frame(img).reformat(format="yuv420p")
-                    pts = max(last_pts + 1, round(t / REC.TIME_BASE))
-                    last_pts = pts
-                    out.pts = pts
-                    out.time_base = REC.TIME_BASE
-                    for packet in stream.encode(out):
-                        container.mux(packet)
-                    if total > 0:
-                        self.progress = min(1.0, t / total)
+                    if packet.stream.index != vs.index:
+                        # The sound keeps its own times: the view's are the same clock's.
+                        for piece in packet.decode():
+                            at = round(float(piece.time or 0.0) * sound.codec_context.sample_rate)
+                            sound_next = REC.encode_sound(container, sound, piece, at, sound_next)
+                        continue
+                    for frame in packet.decode():
+                        t = float(frame.time or 0.0)
+                        states, badges = track.at(t)
+                        img = compositor.draw(frame, states, badges, self.layout)
+                        out = to_frame(img).reformat(format="yuv420p")
+                        pts = max(last_pts + 1, round(t / REC.TIME_BASE))
+                        last_pts = pts
+                        out.pts = pts
+                        out.time_base = REC.TIME_BASE
+                        for out_packet in stream.encode(out):
+                            container.mux(out_packet)
+                        if total > 0:
+                            self.progress = min(1.0, t / total)
                 if not self._stop.is_set():
-                    for packet in stream.encode(None):
-                        container.mux(packet)
+                    for out_packet in stream.encode(None):
+                        container.mux(out_packet)
+                    for out_packet in sound.encode(None) if sound is not None else ():
+                        container.mux(out_packet)
                 container.close()
                 container = None
             if self._stop.is_set():

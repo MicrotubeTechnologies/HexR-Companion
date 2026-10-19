@@ -1,15 +1,17 @@
 """Records a headset's view to an MP4 on this computer, and what its gloves did beside it.
 
-The view is recorded as the headset sends it, square and with nothing drawn on it. Beside it
-goes a .gloves.jsonl: each glove's state for the frames where it changed (the levels, the
-vibrations, the caption's word) and what the headset said of each glove (connected, battery).
+The view is recorded as the headset sends it, square and with nothing drawn on it, with the
+app's sound when the headset shares it (HexR 0.10.5 and later). Beside it goes a .gloves.jsonl:
+each glove's state for the frames where it changed (the levels, the vibrations, the caption's
+word) and what the headset said of each glove (connected, battery).
 The Recordings screen turns the two into a video to share, in landscape, portrait or square
 (hexr/exporter.py), as often as wanted, without the moment having to happen again.
 
-Frames come from the video thread and are encoded on this recorder's own thread, so recording
-never slows the live view; if this falls behind, frames are dropped and counted rather than
-piling up. Each frame keeps the headset's presentation time, so the file plays at the speed it
-happened even when the stream's frame rate wanders.
+Frames come from the video thread, and sound from the sound thread, and are encoded on this
+recorder's own thread, so recording never slows the live view; if this falls behind, frames are
+dropped and counted rather than piling up. Each frame and each piece of sound keeps the headset's
+presentation time, so the file plays at the speed it happened even when the stream's frame rate
+wanders, and the sound stays with the picture: both are stamped on the headset's one clock.
 
 When the headset sent exact haptics, a .haptics.json goes beside it too: the touches in HexR
 Overlay Studio's project format.
@@ -31,6 +33,7 @@ from .haptics import FINGERS, HandState, HapticsTimeline
 from .i18n import tr
 
 TIME_BASE = Fraction(1, 90000)
+SOUND_BITRATE = 192_000
 FINGER_NAMES = ("thumb", "index", "middle", "ring", "pinky", "palm")
 HANDS = ("left", "right")
 GLOVES_SUFFIX = ".gloves.jsonl"
@@ -105,25 +108,31 @@ def state_from_json(d: dict) -> HandState:
 
 
 class Recorder:
-    """One recording. tap() from the video thread, stop() from the UI; `on_done(recorder)` runs
-    on the recorder's thread when the file is finished (or has failed: see `error`).
-    `badges_source()` says what the headset says of each glove now, as the view's panels show."""
+    """One recording. tap() from the video thread, tap_sound() from the sound thread, stop() from
+    the UI; `on_done(recorder)` runs on the recorder's thread when the file is finished (or has
+    failed: see `error`). `badges_source()` says what the headset says of each glove now, as the
+    view's panels show. `sound` is (sample rate, channels) when the headset shares its sound: the
+    recording then has a sound track."""
 
     QUEUE = 90           # three seconds at 30 fps
+    SOUND_QUEUE = 470    # ten seconds of AAC's 1024-sample pieces at 48 kHz
 
     def __init__(self, path: str, timeline: HapticsTimeline, badges_source=lambda: (),
-                 on_done=None, title: str = ""):
+                 on_done=None, title: str = "", sound: tuple[int, int] | None = None):
         self.path = path
         self.timeline = timeline
         self.title = title
+        self.sound = sound
         self._badges_source = badges_source
         self._on_done = on_done
         self._queue: queue.Queue = queue.Queue(maxsize=self.QUEUE)
+        self._sound_queue: queue.Queue = queue.Queue(maxsize=self.SOUND_QUEUE)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="hexr-recorder", daemon=True)
         self.started = time.monotonic()
         self.frames = 0
         self.dropped = 0
+        self.sound_dropped = 0
         self.error = ""
         self.done = False
         self.log_path = ""
@@ -140,6 +149,14 @@ class Recorder:
         except queue.Full:
             self.dropped += 1
 
+    def tap_sound(self, frame, pts_us: int):
+        if self._stop.is_set() or not self.sound:
+            return
+        try:
+            self._sound_queue.put_nowait((frame, pts_us))
+        except queue.Full:
+            self.sound_dropped += 1
+
     def stop(self):
         self._stop.set()
 
@@ -150,16 +167,38 @@ class Recorder:
     # -- the recording thread -------------------------------------------------------------------
 
     def _run(self):
-        container = stream = gloves = None
+        container = stream = sound = gloves = None
         first = last = None          # (pts_us, frame time on the headset's clock)
         last_pts = -1
         last_line = None
         size = None
+        held = []                    # sound that came before the first frame of the view
+        sound_next = 0               # where the sound has got to, in samples
+
+        def place(piece, piece_us: int):
+            # Sound goes where its own time on the headset's clock puts it, from the first frame's.
+            nonlocal sound_next
+            at = round((piece_us - first[0]) * sound.codec_context.sample_rate / 1e6)
+            sound_next = encode_sound(container, sound, piece, at, sound_next)
+
+        def take_sound():
+            while True:
+                try:
+                    piece, piece_us = self._sound_queue.get_nowait()
+                except queue.Empty:
+                    return
+                if container is None:
+                    held.append((piece, piece_us))
+                    del held[:-self.SOUND_QUEUE]
+                elif sound is not None:
+                    place(piece, piece_us)
+
         try:
             while True:
                 try:
                     item = self._queue.get(timeout=0.2)
                 except queue.Empty:
+                    take_sound()
                     if self._stop.is_set():
                         break
                     continue
@@ -167,7 +206,12 @@ class Recorder:
                 if container is None:
                     size = (frame.width // 2 * 2, frame.height // 2 * 2)
                     container, stream = open_video(self.path, size)
+                    if self.sound:
+                        sound = open_sound(container, *self.sound)
                     first = (pts_us, self.timeline.frame_time(pts_us, arrived))
+                    for piece, piece_us in held if sound is not None else ():
+                        place(piece, piece_us)
+                    held.clear()
                     gloves = open(gloves_path(self.path), "w", encoding="utf-8")
                     gloves.write(json.dumps({
                         "hexr": "gloves", "version": 1, "title": self.title,
@@ -189,9 +233,14 @@ class Recorder:
                 for packet in stream.encode(out):
                     container.mux(packet)
                 self.frames += 1
+                take_sound()
             if container is not None:
+                take_sound()
                 for packet in stream.encode(None):
                     container.mux(packet)
+                if sound is not None:
+                    for packet in sound.encode(None):
+                        container.mux(packet)
                 container.close()
                 container = None
                 if self.timeline.exact and first and last:
@@ -259,3 +308,29 @@ def open_video(path: str, size: tuple[int, int], rate: int = 30):
     else:
         stream.bit_rate = 8_000_000
     return container, stream
+
+
+def open_sound(container, rate: int, channels: int):
+    """An AAC track beside the video, timed in samples. Opened before anything is written."""
+    stream = container.add_stream("aac", rate=rate)
+    stream.codec_context.layout = "mono" if channels == 1 else "stereo"
+    stream.codec_context.bit_rate = SOUND_BITRATE
+    stream.time_base = Fraction(1, rate)
+    return stream
+
+
+def encode_sound(container, stream, frame, at: int, next_at: int) -> int:
+    """One piece of decoded sound into `stream` at sample `at`; returns where the sound has got to.
+
+    A piece that would overlap what is written by more than half its length is dropped (sound from
+    before the recording began, or a step back in the headset's stamps); a smaller overlap is
+    moved along to follow on. A gap stays a gap: something the headset did not play.
+    """
+    if at < next_at - frame.samples // 2:
+        return next_at
+    at = max(at, next_at)
+    frame.pts = at
+    frame.time_base = Fraction(1, stream.codec_context.sample_rate)
+    for packet in stream.encode(frame):
+        container.mux(packet)
+    return at + frame.samples

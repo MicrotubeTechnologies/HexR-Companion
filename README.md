@@ -86,10 +86,12 @@ wearer, and record. The protocol is `Documentation~/RemoteProtocol.md` in the
 com.microtube.hexr package, the same one the Android app's Headsets tab speaks.
 The view needs PyAV, which both the Windows and the Mac build ship.
 
-**Recordings** — a recording is the view as it came and what the gloves did,
-frame by frame. Export makes it a video in landscape (1920×1080) or portrait
-(1080×1920), the view with its gloves beside it, or the view alone. The Recordings
-screen plays a recording in the shape picked before it is exported.
+**Recordings** — a recording is the view as it came, with the app's sound when
+the headset shares it (HexR 0.10.5 or newer), and what the gloves did, frame by
+frame. Export makes it a video in landscape (1920×1080) or portrait (1080×1920),
+the view with its gloves beside it, or the view alone, the sound in step with
+the picture. The Recordings screen plays a recording in the shape picked before
+it is exported, without the sound.
 
 **APK Sideload** — install an `.apk` on a Quest plugged into this computer, as
 SideQuest does, in three steps shown one at a time: plug in the headset, choose

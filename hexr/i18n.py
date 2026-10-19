@@ -202,6 +202,12 @@ ZH: dict[str, str] = {
     "Could not reach the view: {error}": "无法连接到画面：{error}",
     "The view stopped: {error}": "画面已中断：{error}",
     "The view could not be decoded: {error}": "无法解码画面：{error}",
+    "Could not reach the sound: {error}": "无法连接到声音：{error}",
+    "The sound stopped: {error}": "声音已中断：{error}",
+    "The sound could not be decoded: {error}": "无法解码声音：{error}",
+    "Sound shared": "正在共享声音",
+    "This app sends no sound. Update it to HexR 0.10.5 or newer to record its sound.":
+        "此应用不发送声音。将其更新到 HexR 0.10.5 或更高版本，即可录制声音。",
 
     # -- the simpler screens
     "Help": "帮助",

@@ -6,10 +6,11 @@ contract is that package's Documentation~/RemoteProtocol.md. The phone app speak
 lines in tests/test_remote.py are the ones its tests and the package's use, so a change to the
 protocol is a change in all three.
 
-Three ports, all on the local network and nothing else:
+Four ports, all on the local network and nothing else:
 - 47800 UDP: every headset broadcasts an announcement every two seconds.
 - 47801 TCP: control, one JSON object per line each way.
 - 47802 TCP: the headset's view as H.264, while the wearer is sharing it.
+- 47803 TCP: the app's sound as AAC beside the view, from HexR 0.10.5 on, when the app shares it.
 
 Nothing here touches Tk. Each connection runs on its own daemon thread and reports through
 callbacks, which run on that thread; the caller hops to Tk itself.
@@ -29,6 +30,7 @@ from .i18n import tr
 DISCOVERY_PORT = 47800
 CONTROL_PORT = 47801
 VIDEO_PORT = 47802
+AUDIO_PORT = 47803
 PROTOCOL = 1
 CLIENT = "HexR Companion"
 
@@ -115,6 +117,16 @@ class GloveState:
 
 
 @dataclass
+class AudioState:
+    """The app's sound beside its view. A headset before HexR 0.10.5 sends none: "off"."""
+    state: str = "off"             # off | live | denied | unsupported | error
+    port: int = 0
+    sample_rate: int = 0
+    channels: int = 0
+    message: str = ""
+
+
+@dataclass
 class StreamState:
     state: str = "off"             # off | requesting | live | denied | unsupported | error
     port: int = 0
@@ -122,6 +134,7 @@ class StreamState:
     height: int = 0
     viewers: int = 0
     message: str = ""
+    audio: AudioState = field(default_factory=AudioState)
 
 
 @dataclass
@@ -208,6 +221,7 @@ def parse_status(obj: dict) -> Status:
             pressure_kpa=[_int(p, 0) / 10 for p in g.get("pressureDeciKPa") or []],
         )
     s = obj.get("stream") or {}
+    a = s.get("audio") if isinstance(s.get("audio"), dict) else {}
     return Status(
         id=str(obj.get("id", "")),
         name=str(obj.get("name", "")),
@@ -230,6 +244,13 @@ def parse_status(obj: dict) -> Status:
             height=_int(s.get("height"), 0),
             viewers=_int(s.get("viewers"), 0),
             message=str(s.get("message", "")),
+            audio=AudioState(
+                state=str(a.get("state", "off")),
+                port=_int(a.get("port"), 0),
+                sample_rate=_int(a.get("sampleRate"), 0),
+                channels=_int(a.get("channels"), 0),
+                message=str(a.get("message", "")),
+            ),
         ),
         commands=[(str(c.get("id", "")), str(c.get("label", "")))
                   for c in obj.get("commands") or [] if isinstance(c, dict)],
@@ -290,6 +311,18 @@ def parse_video_header(header: bytes) -> tuple[int, int, int]:
         raise ValueError("not a HexR video stream")
     width, height, codec = struct.unpack(">HHB", header[4:])
     return width, height, codec
+
+
+AUDIO_MAGIC = b"HXA1"
+CODEC_AAC = 1
+
+
+def parse_audio_header(header: bytes) -> tuple[int, int, int]:
+    """The 10 bytes a sound connection starts with: (sample rate, channels, codec)."""
+    if len(header) != 10 or header[:4] != AUDIO_MAGIC:
+        raise ValueError("not a HexR sound stream")
+    rate, channels, codec = struct.unpack(">IBB", header[4:])
+    return rate, channels, codec
 
 
 def parse_packet_header(header: bytes) -> tuple[int, int, int]:
@@ -643,6 +676,99 @@ class VideoReceiver:
             return
         with self._lock:
             self._frame = drawn
+        self.frames += 1
+        self.state = "playing"
+
+
+# ---------------------------------------------------------------------------
+# Sound
+# ---------------------------------------------------------------------------
+
+class AudioReceiver:
+    """Reads one headset's sound, decoding on this thread, and hands each piece on.
+
+    Each callable in `taps` (a recorder) gets `(frame, pts_us)` for every decoded av.AudioFrame:
+    1024 samples, with when they played on the headset's clock, the clock the video frames carry.
+    `sample_rate` and `channels` are what the headset said it sends. `state` and `message` say what
+    it is doing, as a VideoReceiver's do.
+    """
+
+    def __init__(self, host: str, port: int):
+        self.host = host
+        self.port = port
+        self._stop = threading.Event()
+        self._sock: socket.socket | None = None
+        self.taps: list = []
+        self.state = "connecting"      # connecting | playing | ended | failed
+        self.message = ""
+        self.sample_rate = 0
+        self.channels = 0
+        self.frames = 0
+        self.bad_packets = 0
+        self.tap_error = ""
+        threading.Thread(target=self._run, name=f"hexr-sound-{host}", daemon=True).start()
+
+    def stop(self):
+        self._stop.set()
+        _close(self._sock)
+
+    def _run(self):
+        try:
+            import av
+        except ImportError:
+            self.state, self.message = "failed", video_available() or ""
+            return
+        try:
+            sock = socket.create_connection((self.host, self.port), timeout=5.0)
+        except OSError as e:
+            self.state, self.message = "failed", tr("Could not reach the sound: {error}",
+                                                    error=e)
+            return
+        self._sock = sock
+        try:
+            sock.settimeout(10.0)
+            rate, channels, codec = parse_audio_header(_read_exact(sock, 10))
+            if codec != CODEC_AAC:
+                raise ValueError(f"unknown sound codec {codec}")
+            self.sample_rate, self.channels = rate, channels
+            decoder = None
+            while not self._stop.is_set():
+                length, flags, pts = parse_packet_header(_read_exact(sock, 13))
+                payload = _read_exact(sock, length)
+                # The AudioSpecificConfig comes first, and the decoder is made from it.
+                if flags & FLAG_CONFIG:
+                    decoder = av.CodecContext.create("aac", "r")
+                    decoder.extradata = payload
+                    continue
+                if decoder is None:
+                    continue
+                packet = av.Packet(payload)
+                packet.pts = pts
+                try:
+                    frames = decoder.decode(packet)
+                except av.error.InvalidDataError:
+                    self.bad_packets += 1
+                    continue
+                for frame in frames:
+                    self._keep(frame, pts if frame.pts is None else frame.pts)
+            self.state = "ended"
+        except (OSError, ValueError, EOFError) as e:
+            if self._stop.is_set() or isinstance(e, EOFError):
+                self.state, self.message = "ended", ""
+            else:
+                self.state, self.message = "failed", tr("The sound stopped: {error}", error=e)
+        except av.error.FFmpegError as e:
+            self.state, self.message = "failed", tr("The sound could not be decoded: {error}",
+                                                    error=e)
+        finally:
+            _close(sock)
+
+    def _keep(self, frame, pts_us: int):
+        for tap in list(self.taps):
+            try:
+                tap(frame, pts_us)
+            except Exception as e:  # noqa: BLE001
+                self.tap_error = str(e) or type(e).__name__
         self.frames += 1
         self.state = "playing"
 
