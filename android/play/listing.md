@@ -31,12 +31,12 @@ HEXR Companion
 Test HEXR haptic gloves over Bluetooth, and watch a HEXR headset's view live.
 ```
 
-### Full description — 4000 max [3634]
+### Full description — 4000 max [3603]
 
 ```
 HEXR Companion connects to a HEXR pneumatic haptic glove over Bluetooth LE and tells you whether it works. At an event, it also shows you what a HEXR headset's wearer sees, with their gloves lighting up beside the view as they are touched.
 
-It is the phone version of the desktop HEXR Companion, with the same glove on screen and the same verdict thresholds, so a glove that passes on a bench laptop passes here, and a result recorded on either means the same thing.
+It is the phone version of the desktop HEXR Companion, with the same glove on screen and the same verdict thresholds, so a glove that passes on a bench laptop passes here too.
 
 CONNECT
 
@@ -79,7 +79,7 @@ Android 8.0 or newer, Bluetooth LE, and a HEXR glove. The glove is the whole poi
 
 This is a test and diagnostic instrument, not a runtime. HEXR gloves have no consumer companion app and do not pair through Android's Bluetooth settings. To build something with HEXR you integrate the com.microtube.hexr Unity package or the Python library; the glove does not need this app to work with your application.
 
-HEXR and HEXR Companion are products of Microtube Technologies.
+HEXR and HEXR Companion are products of Microtube Technologies Pte Ltd, Singapore.
 ```
 
 ### What's new — 500 max [402]
