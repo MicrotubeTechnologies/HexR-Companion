@@ -80,6 +80,7 @@ fuse av av
 step "Running protocol tests"
 "$VENV/bin/python" tests/test_protocol.py
 "$VENV/bin/python" tests/test_remote.py
+"$VENV/bin/python" tests/test_i18n.py
 "$VENV/bin/python" tests/test_sideload.py
 
 # -------------------------------------------------------------- adb

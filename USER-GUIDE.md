@@ -311,7 +311,8 @@ middle of it, keeping its lower part, where hands are.
   wrong way. Works on Quest and PICO alike. A tick shows it worked. The app
   needs **HexR 0.11.0 or newer**; on an older one the button is greyed out.
 - **Record** — records the view, the app's sound and what the gloves did, in
-  *Videos\HEXR Companion\Recordings*. While it records the button shows the
+  *Videos\HEXR Companion\Recordings* (*Movies/HEXR Companion/Recordings* on a
+  Mac). While it records the button shows the
   time; when it stops, **Open in Recordings** takes you to it, to export it as
   a video (below). With a HexR 0.10.2 app a *.haptics.json* is saved beside it
   too, which HexR Overlay Studio opens.
@@ -338,7 +339,10 @@ the Wi-Fi is set to *Private* in Windows settings. Event Wi-Fi often stops
 devices seeing each other; press **+ Add by address** under the list, type the
 headset's IP address and press **Add** instead, or bring your own router.
 
-On a Mac the Headsets screen controls headsets but cannot show their view yet.
+On a Mac, macOS asks the first time whether the app may find devices on your
+local network: choose **Allow**. If you said no, turn it on again in *System
+Settings › Privacy & Security › Local Network*. The view and its sound both
+come over the network, so the Mac needs no microphone permission.
 
 ---
 
@@ -365,11 +369,12 @@ video to share.
    thin bands above and below. In portrait the view runs across the top, whole.
 
 3. **Export.** A minute of recording takes about a minute and a half. **Stop**
-   cancels it. The video goes in *Videos\HEXR Companion\Exports*, named after
+   cancels it. The video goes in *Videos\HEXR Companion\Exports* (*Movies/HEXR
+   Companion/Exports* on a Mac), named after
    the recording and its shape; **Exported · Show in folder** finds it.
 
 The same recording can be exported in every shape, as often as you like.
-**Open folder** opens *Videos\HEXR Companion*.
+**Open folder** opens *Videos\HEXR Companion* (*Movies/HEXR Companion* on a Mac).
 
 ---
 
