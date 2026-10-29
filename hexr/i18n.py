@@ -32,6 +32,15 @@ def _system_language() -> str:
                 else "en"
         except Exception:
             pass
+    if sys.platform == "darwin":
+        # An app opened from Finder has no LANG, so the locale says nothing; the Mac's own list
+        # of preferred languages, first one first, is what it is set up in.
+        try:
+            from Foundation import NSLocale
+            first = str((NSLocale.preferredLanguages() or [""])[0])
+            return "zh" if first.lower().startswith("zh") else "en"
+        except Exception:
+            pass
     try:
         code = locale.getlocale()[0] or ""
     except ValueError:

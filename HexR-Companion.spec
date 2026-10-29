@@ -112,7 +112,7 @@ a = Analysis(
         'hexr.screens.headsets', 'hexr.screens.fullview', 'hexr.haptics',
         'hexr.overlay', 'hexr.viewer', 'hexr.recorder', 'PIL.ImageTk',
         'hexr.sideload', 'hexr.screens.sideload', 'hexr.speaker', 'hexr.glovenames',
-    ],
+    ] + (['AppKit', 'Foundation'] if MAC else []),  # displays and language on a Mac
     hookspath=[],
     runtime_hooks=[],
     excludes=[],

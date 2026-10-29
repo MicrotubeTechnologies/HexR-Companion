@@ -48,6 +48,19 @@ def displays() -> list[tuple[int, int, int, int]]:
             user32.EnumDisplayMonitors(None, None, proc(each), 0)
         except Exception:  # noqa: BLE001
             found = []
+    elif sys.platform == "darwin":
+        # AppKit comes with bleak. Its frames count up from the bottom of the main display (the
+        # first screen); Tk counts down from its top. Both are in points, so only y is flipped.
+        try:
+            from AppKit import NSScreen
+            screens = NSScreen.screens()
+            top = screens[0].frame().size.height
+            for s in screens:
+                f = s.frame()
+                found.append((int(f.origin.x), int(top - f.origin.y - f.size.height),
+                              int(f.size.width), int(f.size.height)))
+        except Exception:  # noqa: BLE001
+            found = []
     return found
 
 
