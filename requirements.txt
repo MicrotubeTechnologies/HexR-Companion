@@ -7,3 +7,5 @@ av>=12; sys_platform == "win32"
 av==13.1.0; sys_platform == "darwin"
 # The glove drawn over that view, and recording it. Needed by the screen on every platform.
 pillow>=10.1
+# The headset's sound, played while its view is watched. Carries PortAudio for Windows and macOS.
+sounddevice>=0.4.6

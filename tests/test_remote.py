@@ -109,7 +109,7 @@ def test_a_status_missing_fields_still_reads():
     assert s.stream.state == "off" and s.scene_index == -1 and s.scenes == []
     # A headset before HexR 0.10.5 says nothing about sound, and sends none.
     assert s.stream.audio.state == "off" and s.stream.audio.port == 0
-    # A headset before HexR 0.11.0 says nothing about recentering, and cannot do it.
+    # A headset before HexR 0.10.6 says nothing about recentering, and cannot do it.
     assert s.allow_recenter is False
 
 
@@ -292,6 +292,64 @@ def test_a_headset_added_by_address_has_its_own_key():
     model.forget("ip:127.0.0.1")
     assert model.rows() == []
     model.stop()
+
+
+
+# -- picking one glove out of several (HexR 0.10.6) ------------------------------
+
+def test_glove_search_requests_match_the_reference_lines():
+    assert R.glove("search") == '{"type":"glove","action":"search"}'
+    assert R.glove("connect", "left", "D4:3D:39:A1:B2:C3") == \
+        '{"type":"glove","action":"connect","hand":"left","address":"D4:3D:39:A1:B2:C3"}'
+    assert R.glove("forget", "left") == '{"type":"glove","action":"forget","hand":"left"}'
+    assert R.trigger() == '{"type":"trigger"}'
+    assert R.trigger("right") == '{"type":"trigger","hand":"right"}'
+
+
+def test_reads_the_saved_gloves_and_the_last_search():
+    line = REFERENCE_STATUS[:-1].replace(
+        '"pressureDeciKPa":[10,0,0,0,0,0,452]}',
+        '"pressureDeciKPa":[10,0,0,0,0,0,452],"savedAddress":"D4:3D:39:A1:B2:C3"}') + \
+        ',"gloveSearch":{"state":"done","message":"","found":[{"address":"D4:3D:39:D4:E5:F6",' \
+        '"name":"HaptGloveAR Right","hand":"right","rssi":-48},{"address":"","name":"x"},' \
+        '{"address":"AA:BB","name":"HexR 07","hand":"up","rssi":"near"}]}}'
+    s = R.parse_status(R.parse_json(line))
+    assert s.gloves["left"].saved_address == "D4:3D:39:A1:B2:C3"
+    assert s.gloves["right"].saved_address == ""
+    assert s.glove_search.state == "done"
+    # One without an address is no use; a hand or strength that is not one reads as unknown.
+    assert s.glove_search.found == [
+        R.NearbyGlove("D4:3D:39:D4:E5:F6", "HaptGloveAR Right", "right", -48),
+        R.NearbyGlove("AA:BB", "HexR 07", "", 0),
+    ]
+
+
+def test_a_headset_before_0_10_6_cannot_search():
+    assert R.parse_status(R.parse_json(REFERENCE_STATUS)).glove_search is None
+
+
+def test_glove_names_stick_by_address_beside_the_headset_names():
+    with tempfile.TemporaryDirectory() as tmp:
+        env = {k: os.environ.get(k) for k in ("APPDATA", "XDG_CONFIG_HOME", "HOME")}
+        os.environ["APPDATA"] = os.environ["XDG_CONFIG_HOME"] = os.environ["HOME"] = tmp
+        try:
+            model = H.Headsets()
+            model.rename_glove("d4:3d:39:a1:b2:c3", "  Kit 3 Left ")
+            model.rename("q3-1", "Station 1")
+            # Either name saved keeps the other.
+            again = H.Headsets()
+            assert again.glove_name("D4:3D:39:A1:B2:C3") == "Kit 3 Left"
+            assert H._load_nicknames() == {"q3-1": "Station 1"}
+            again.rename_glove("D4:3D:39:A1:B2:C3", "")
+            assert H.Headsets().glove_name("D4:3D:39:A1:B2:C3") == ""
+            model.stop()
+            again.stop()
+        finally:
+            for k, v in env.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
 
 
 if __name__ == "__main__":

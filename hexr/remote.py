@@ -61,8 +61,20 @@ def ping() -> str:
     return _line({"type": "ping"})
 
 
-def glove(action: str, hand: str) -> str:
-    return _line({"type": "glove", "action": action, "hand": hand})
+def glove(action: str, hand: str | None = None, address: str | None = None) -> str:
+    """connect / disconnect / forget a hand's glove; connect with an address for that exact
+    glove (HexR 0.10.6 and later). "search", with no hand, lists every glove in range."""
+    obj = {"type": "glove", "action": action}
+    if hand is not None:
+        obj["hand"] = hand
+    if address:
+        obj["address"] = address
+    return _line(obj)
+
+
+def trigger(hand: str | None = None) -> str:
+    """Every channel of the connected gloves pressed for a second (HexR 0.10.6 and later)."""
+    return _line({"type": "trigger"} if hand is None else {"type": "trigger", "hand": hand})
 
 
 def release(hand: str | None = None) -> str:
@@ -110,10 +122,29 @@ class GloveState:
     message: str = ""
     battery_pct: int = -1          # -1 until the glove has reported it
     pressure_kpa: list[float] = field(default_factory=list)  # six channels, then the source
+    # The glove this hand is saved to and connects to only (HexR 0.10.6 and later); empty when
+    # it takes the first glove of its hand it finds.
+    saved_address: str = ""
 
     @property
     def connected(self) -> bool:
         return self.state == "connected"
+
+
+@dataclass
+class NearbyGlove:
+    address: str
+    name: str                      # what it advertises, e.g. "HaptGloveAR Left"
+    hand: str = ""                 # left | right from that name, or "" when it does not say
+    rssi: int = 0                  # dBm, nearer 0 is closer; 0 when unknown
+
+
+@dataclass
+class GloveSearch:
+    """The headset's last search for every glove in range."""
+    state: str = "idle"            # idle | searching | done | failed
+    message: str = ""
+    found: list[NearbyGlove] = field(default_factory=list)   # nearest first
 
 
 @dataclass
@@ -161,6 +192,8 @@ class Status:
     controllers: int
     haptics: bool = False          # the headset sends "haptics" lines (HexR 0.10.2 and later)
     clock_us: int = 0              # its clock when it sent this: the one haptics and video use
+    # None from a headset before HexR 0.10.6, which cannot search for gloves.
+    glove_search: GloveSearch | None = None
 
 
 @dataclass
@@ -219,6 +252,7 @@ def parse_status(obj: dict) -> Status:
             message=str(g.get("message", "")),
             battery_pct=_int(g.get("batteryPct"), -1),
             pressure_kpa=[_int(p, 0) / 10 for p in g.get("pressureDeciKPa") or []],
+            saved_address=str(g.get("savedAddress", "")),
         )
     s = obj.get("stream") or {}
     a = s.get("audio") if isinstance(s.get("audio"), dict) else {}
@@ -257,12 +291,30 @@ def parse_status(obj: dict) -> Status:
         allow_glove_control=bool(obj.get("allowGloveControl", True)),
         allow_video=bool(obj.get("allowVideo", True)),
         expose_scenes=bool(obj.get("exposeScenes", True)),
-        # Missing before HexR 0.11.0, which does not know the request either.
+        # Missing before HexR 0.10.6, which does not know the request either.
         allow_recenter=bool(obj.get("allowRecenter", False)),
         controllers=_int(obj.get("controllers"), 0),
         haptics=bool(obj.get("haptics", False)),
         clock_us=_int(obj.get("clockUs"), 0),
+        glove_search=_glove_search(obj.get("gloveSearch")),
     )
+
+
+def _glove_search(obj) -> GloveSearch | None:
+    if not isinstance(obj, dict):
+        return None
+    found = []
+    for g in obj.get("found") or []:
+        if not isinstance(g, dict) or not g.get("address"):
+            continue
+        found.append(NearbyGlove(
+            address=str(g["address"]),
+            name=str(g.get("name", "")),
+            hand=g.get("hand") if g.get("hand") in HANDS else "",
+            rssi=_int(g.get("rssi"), 0),
+        ))
+    return GloveSearch(state=str(obj.get("state", "idle")), message=str(obj.get("message", "")),
+                       found=found)
 
 
 HAPTIC_MODES = ("off", "pressure", "vibration", "pulse")

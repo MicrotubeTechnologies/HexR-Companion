@@ -156,6 +156,23 @@ ZH: dict[str, str] = {
 
     # -- headsets
     "Add": "添加",
+    "Find gloves": "查找手套",
+    "Update this app to HexR 0.10.6 or later to pick gloves.":
+        "请将此应用更新到 HexR 0.10.6 或更高版本，才能选择手套。",
+    "Any glove": "任意手套",
+    "Looking for gloves…": "正在查找手套…",
+    "{hand} glove · {tag}": "{hand}手套 · {tag}",
+    "Glove · {tag}": "手套 · {tag}",
+    "Double-click to rename": "双击重命名",
+    "Sound on": "声音：开",
+    "Sound off": "声音：关",
+    "This computer cannot play sound: {error}": "本电脑无法播放声音：{error}",
+    "The headset's sound, played here while you watch. It needs the app's Share Sound on.":
+        "观看时在本电脑上播放头显的声音。需要应用开启 Share Sound。",
+    "Searching…": "正在查找…",
+    "No gloves found. Switch them on, and disconnect them from other headsets.":
+        "未找到手套。请打开手套，并从其他头显上断开连接。",
+
     "Headset": "头显",
     "State": "状态",
     "L": "左",
@@ -170,6 +187,10 @@ ZH: dict[str, str] = {
     "{n} controllers": "{n} 个手柄",
     "Not connected to this headset right now.": "当前未连接到此头显。",
     "Release all": "全部释放",
+    "Trigger all": "全部触发",
+    "Presses every finger and the palm for a second, to check the gloves work.":
+        "所有手指和手掌按压一秒，用来检查手套是否正常工作。",
+    "Needs HexR 0.10.6.": "需要 HexR 0.10.6。",
     "No glove handler in this app": "此应用没有手套处理程序",
     "This computer has a glove for this hand; disconnect it here first.":
         "这台电脑已连接这只手的手套，请先在这里断开。",
@@ -249,7 +270,7 @@ ZH: dict[str, str] = {
     "Failed": "失败",
     "Watch asks the wearer to share.": "点击“观看”会请佩戴者共享画面。",
     "Saving…": "正在保存…",
-    "Needs HexR 0.11.0 with Allow Recenter.": "需要 HexR 0.11.0 并开启 Allow Recenter。",
+    "Needs HexR 0.10.6 with Allow Recenter.": "需要 HexR 0.10.6 并开启 Allow Recenter。",
 
     # -- recordings, and the gloves beside the view
     "Esc to leave full screen · R to record": "按 Esc 退出全屏 · 按 R 录制",

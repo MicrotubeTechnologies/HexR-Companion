@@ -61,6 +61,7 @@ class Headsets:
         self._entries: dict[str, _Entry] = {}
         self._discovery = R.Discovery(self._on_announce, self._on_discovery_error)
         self._nicknames = _load_nicknames()
+        self._glove_names = _load_glove_names()
         self.started = False
         self.discovery_error: str | None = None
 
@@ -118,6 +119,39 @@ class Headsets:
 
     def disconnect_glove(self, key: str, hand: str):
         self._send(key, R.glove("disconnect", hand))
+
+    # -- picking one glove out of several, by its address ----------------------------------
+
+    def search_gloves(self, key: str):
+        """The headset lists every glove in range; the result comes in its status."""
+        self._send(key, R.glove("search"))
+
+    def connect_glove_to(self, key: str, hand: str, address: str):
+        """That exact glove, which the headset then keeps to for this hand."""
+        self._send(key, R.glove("connect", hand, address))
+
+    def forget_glove(self, key: str, hand: str):
+        """The headset goes back to taking the first glove of this hand it finds."""
+        self._send(key, R.glove("forget", hand))
+
+    def glove_name(self, address: str) -> str:
+        """The name given to the glove at this address on this computer, or ""."""
+        with self._lock:
+            return self._glove_names.get(address.upper(), "")
+
+    def rename_glove(self, address: str, name: str):
+        """Names a glove by its address, so it is known by that name on every headset."""
+        name = name.strip()
+        with self._lock:
+            if name:
+                self._glove_names[address.upper()] = name
+            else:
+                self._glove_names.pop(address.upper(), None)
+            names = dict(self._glove_names)
+        _save_glove_names(names)
+
+    def trigger(self, key: str):
+        self._send(key, R.trigger())
 
     def release(self, key: str):
         self._send(key, R.release())
@@ -260,4 +294,22 @@ def _load_nicknames() -> dict[str, str]:
 
 
 def _save_nicknames(nicknames: dict[str, str]):
-    settings.save("headsets.json", {"nicknames": nicknames})
+    data = settings.load("headsets.json")
+    data["nicknames"] = nicknames
+    settings.save("headsets.json", data)
+
+
+# -- glove names, by Bluetooth address, kept between runs -----------------------------
+
+def _load_glove_names() -> dict[str, str]:
+    try:
+        return {str(k).upper(): str(v) for k, v in settings.load("headsets.json")
+                .get("gloves", {}).items()}
+    except AttributeError:
+        return {}
+
+
+def _save_glove_names(names: dict[str, str]):
+    data = settings.load("headsets.json")
+    data["gloves"] = names
+    settings.save("headsets.json", data)

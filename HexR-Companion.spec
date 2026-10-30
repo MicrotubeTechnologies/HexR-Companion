@@ -26,7 +26,7 @@ MAC = sys.platform == "darwin"
 datas, binaries, hiddenimports = [], [], []
 # PyAV, for the Headsets screen's live view, ships FFmpeg as DLLs beside its
 # extension modules; collect_all brings them along.
-for pkg in ("bleak", "av"):
+for pkg in ("bleak", "av", "sounddevice"):
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hiddenimports += h
 
@@ -111,7 +111,7 @@ a = Analysis(
         'hexr.screens.test', 'hexr.screens.quicktest',
         'hexr.screens.headsets', 'hexr.screens.fullview', 'hexr.haptics',
         'hexr.overlay', 'hexr.viewer', 'hexr.recorder', 'PIL.ImageTk',
-        'hexr.sideload', 'hexr.screens.sideload',
+        'hexr.sideload', 'hexr.screens.sideload', 'hexr.speaker',
     ],
     hookspath=[],
     runtime_hooks=[],

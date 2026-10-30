@@ -18,12 +18,14 @@ import tkinter as tk
 
 from .. import recorder as REC
 from .. import remote as R
+from .. import settings
+from .. import speaker as SPK
 from .. import theme as T
 from ..haptics import HapticsTimeline
 from ..headsets import Headsets, HeadsetRow
 from ..i18n import N_, tr
 from ..viewer import LANDSCAPE, Compositor, GloveBadge, boxes, frame_size, hit
-from ..widgets import (Button, Divider, Dot, StatusChip, Surface, TextLink, Tooltip,
+from ..widgets import (Button, Divider, Dot, SignalBars, StatusChip, Surface, TextLink, Tooltip,
                        icon_fullscreen, icon_more)
 from .base import Screen, section_label
 from .fullview import PUMP_MS, FullView
@@ -312,6 +314,15 @@ class _Detail(tk.Frame):
                                hover_fg=T.ACCENT, hover_border=T.ACCENT)
         self.full_btn.pack(side="left", padx=(10, 0))
         Tooltip(self.full_btn, tr("Full screen"))
+        # The headset's sound, played on this computer while its view is watched.
+        self._sound_on = bool(settings.load("settings.json").get("headsetSound", True))
+        self.speaker: SPK.Speaker | None = None
+        self.sound_btn = Button(bar, "", command=self._toggle_sound, fill=T.INSET, fg=T.TEXT,
+                                border=T.BORDER, hover_fill=T.INSET, hover_fg=T.ACCENT,
+                                hover_border=T.ACCENT, min_width=120)
+        self.sound_btn.pack(side="left", padx=(10, 0))
+        Tooltip(self.sound_btn, self._sound_hint)
+        self._show_sound_btn()
         self.state_chip = StatusChip(bar, "")
         self.state_chip.pack(side="left", padx=(14, 0))
         self.saved_link = TextLink(bar, "✓ " + tr("Open in Recordings"),
@@ -326,14 +337,26 @@ class _Detail(tk.Frame):
                fill=T.SURFACE, fg=T.TEXT_2, border=T.BORDER, hover_fill=T.INSET,
                hover_fg=T.ACCENT, hover_border=T.ACCENT, padx=14,
                font=T.font(12.5, 600)).pack(side="left")
+        # Press every channel of the connected gloves for a second: does the glove work?
+        self.trigger_btn = Button(actions, tr("Trigger all"), command=self._trigger, height=34,
+                                  fill=T.SURFACE, fg=T.TEXT_2, border=T.BORDER,
+                                  hover_fill=T.INSET, hover_fg=T.ACCENT, hover_border=T.ACCENT,
+                                  padx=14, font=T.font(12.5, 600))
+        self.trigger_btn.pack(side="left", padx=(10, 0))
+        Tooltip(self.trigger_btn, self._trigger_hint)
+        self._triggered_at = 0.0
         self.recenter_btn = Button(actions, tr("Recenter"), command=self._recenter, height=34,
                                    fill=T.INSET, fg=T.TEXT, border=T.BORDER,
                                    hover_fill=T.ACCENT, hover_fg=T.CANVAS,
                                    hover_border=T.ACCENT, min_width=110)
         self.recenter_btn.pack(side="left", padx=(10, 0))
         Tooltip(self.recenter_btn, lambda: "" if self._can_recenter() else
-                tr("Needs HexR 0.11.0 with Allow Recenter."))
+                tr("Needs HexR 0.10.6 with Allow Recenter."))
         self._recentered_at = 0.0
+
+        # -- which glove each hand connects to, and finding the right one among several
+        self.gloves = _GloveFinder(self, self)
+        self.gloves.pack(fill="x", pady=(18, 0))
 
         # -- Details: the numbers
         self.numbers = tk.Label(self, text="", bg=T.SURFACE, fg=T.TEXT_FAINT, font=T.mono(11),
@@ -372,6 +395,13 @@ class _Detail(tk.Frame):
         if badges != self.compositor.badges:
             self.compositor.badges = self._idle.badges = badges
 
+        can_trigger = bool(s and r.link == "connected" and not s.paused and s.allow_glove_control
+                           and s.glove_search is not None
+                           and any(g.connected for g in s.gloves.values()))
+        pressing = time.monotonic() - self._triggered_at < 1.2 and not r.error
+        self.trigger_btn.set(disabled=not can_trigger, glyph="✓" if pressing else "",
+                             fg=T.SUCCESS if pressing else T.TEXT_2)
+
         usable = bool(s and r.link == "connected" and self._can_recenter() and not s.paused)
         just = time.monotonic() - self._recentered_at < 3.0 and not r.error
         self.recenter_btn.set(disabled=not usable, glyph="✓" if just else "",
@@ -384,6 +414,7 @@ class _Detail(tk.Frame):
         elif self.notice.winfo_manager() and not self._notice_recording():
             self.notice.pack_forget()
 
+        self.gloves.refresh(r)
         self._update_view(r)
         if self.screen_.details:
             self.numbers.configure(text=self._numbers(r))
@@ -514,6 +545,16 @@ class _Detail(tk.Frame):
     def _can_recenter(self) -> bool:
         s = self._last_r.status if self._last_r else None
         return bool(s and s.allow_recenter)
+
+    def _trigger(self):
+        self._triggered_at = time.monotonic()
+        self.model.trigger(self.key)
+
+    def _trigger_hint(self) -> str:
+        s = self._last_r.status if self._last_r else None
+        if s and s.glove_search is None:
+            return tr("Needs HexR 0.10.6.")
+        return tr("Presses every finger and the palm for a second, to check the gloves work.")
 
     def _recenter(self):
         self._recentered_at = time.monotonic()
@@ -653,6 +694,7 @@ class _Detail(tk.Frame):
             return
         if self.sound is None:
             self.sound = R.AudioReceiver(r.host, a.port)
+            self._attach_speaker()
         elif self.sound.state in ("failed", "ended") and \
                 time.monotonic() - self._sound_retry_at > VIDEO_RETRY_S:
             # As with the view: join again, a recording going on carrying over.
@@ -666,6 +708,44 @@ class _Detail(tk.Frame):
         if self.sound:
             self.sound.stop()
             self.sound = None
+        if self.speaker:
+            self.speaker.close()
+            self.speaker = None
+
+    def _attach_speaker(self):
+        """Plays the sound here too, when it is on and there is sound coming in."""
+        if not self._sound_on or self.sound is None or self.speaker is not None \
+                or SPK.available() is not None:
+            return
+        self.speaker = SPK.Speaker()
+        self.sound.taps.append(self.speaker.tap)
+
+    def _toggle_sound(self):
+        self._sound_on = not self._sound_on
+        data = settings.load("settings.json")
+        data["headsetSound"] = self._sound_on
+        settings.save("settings.json", data)
+        if self._sound_on:
+            self._attach_speaker()
+        elif self.speaker:
+            if self.sound and self.speaker.tap in self.sound.taps:
+                self.sound.taps.remove(self.speaker.tap)
+            self.speaker.close()
+            self.speaker = None
+        self._show_sound_btn()
+
+    def _show_sound_btn(self):
+        self.sound_btn.set(text=tr("Sound on") if self._sound_on else tr("Sound off"),
+                           glyph="♪" if self._sound_on else "×")
+
+    def _sound_hint(self) -> str:
+        why = SPK.available()
+        if why:
+            return tr("This computer cannot play sound: {error}", error=why)
+        if self.speaker and self.speaker.error:
+            return tr("This computer cannot play sound: {error}", error=self.speaker.error)
+        return tr("The headset's sound, played here while you watch. It needs the app's "
+                  "Share Sound on.")
 
     # -- drawing the view -------------------------------------------------------------------------
 
@@ -817,6 +897,158 @@ class _Detail(tk.Frame):
 
 
 # -- helpers -------------------------------------------------------------------------
+
+class _GloveFinder(tk.Frame):
+    """Which physical glove each hand of the headset connects to, and finding the right one when
+    several are switched on.
+
+    Every left glove advertises the same name, and so does every right one, so with several kits
+    on in one room a plain connect takes whichever answers first. Find gloves has the headset list
+    every glove in range, nearest first; Connect picks one, and the headset keeps to it from then
+    on, across drops and restarts. A glove's name, given here with a double-click, belongs to that
+    glove on this computer, so it carries it on every headset. Addresses stay out of sight: a glove
+    with no name is told apart by the last four characters of its address."""
+
+    def __init__(self, parent, detail: "_Detail"):
+        super().__init__(parent, bg=T.SURFACE)
+        self.model = detail.model
+        self.key = detail.key
+        self._shown = None            # what the section was last drawn from
+        self._renaming: str | None = None
+
+        head = tk.Frame(self, bg=T.SURFACE)
+        head.pack(fill="x")
+        section_label(head, tr("Gloves")).pack(side="left")
+        self.find_btn = Button(head, tr("Find gloves"), command=self._find, height=30,
+                               fill=T.INSET, fg=T.TEXT, border=T.BORDER, hover_fill=T.INSET,
+                               hover_fg=T.ACCENT, hover_border=T.ACCENT, padx=12,
+                               font=T.font(12, 600))
+        self.find_btn.pack(side="left", padx=(12, 0))
+        self.body = tk.Frame(self, bg=T.SURFACE)
+        self.body.pack(fill="x", pady=(8, 0))
+
+    def refresh(self, r: HeadsetRow):
+        s = r.status
+        search = s.glove_search if s else None
+        usable = bool(s and r.link == "connected" and s.allow_glove_control and not s.paused
+                      and search is not None)
+        searching = bool(search and search.state == "searching")
+        self.find_btn.set(disabled=not usable or searching,
+                          text=tr("Searching…") if searching else tr("Find gloves"))
+        saved = tuple((h, g.saved_address, g.state) for h in R.HANDS
+                      if s and (g := s.gloves.get(h)))
+        found = search.found if search else []
+        names = tuple(self.model.glove_name(a) for a in [g.address for g in found] +
+                      [a for _h, a, _st in saved if a])
+        shown = (s is None, repr(search), saved, names, usable, self._renaming)
+        if shown == self._shown:
+            return
+        self._shown = shown
+        for child in self.body.winfo_children():
+            child.destroy()
+        if s is None:
+            return
+        if search is None:
+            self._line(tr("Update this app to HexR 0.10.6 or later to pick gloves."))
+            return
+
+        # Each hand, and the glove it keeps to.
+        saved_by = {}
+        hands = tk.Frame(self.body, bg=T.SURFACE)
+        hands.pack(fill="x")
+        for hand, address, _state in saved:
+            row = tk.Frame(hands, bg=T.SURFACE)
+            row.pack(fill="x", pady=1)
+            tk.Label(row, text=tr(hand.capitalize()), bg=T.SURFACE, fg=T.TEXT_MUTED,
+                     font=T.font(12.5), width=6, anchor="w").pack(side="left")
+            if address:
+                saved_by[address.upper()] = hand
+                tk.Label(row, text=self._glove_label(address, hand), bg=T.SURFACE, fg=T.TEXT,
+                         font=T.font(13, 600), anchor="w").pack(side="left")
+                if usable:
+                    TextLink(row, tr("Forget"), size=12,
+                             command=lambda h=hand: self.model.forget_glove(self.key, h)) \
+                        .pack(side="left", padx=(12, 0))
+            else:
+                tk.Label(row, text=tr("Any glove"), bg=T.SURFACE, fg=T.TEXT_MUTED,
+                         font=T.font(13), anchor="w").pack(side="left")
+
+        # The last search: a word while it runs or when it found nothing, then the gloves.
+        if search.state == "searching":
+            self._line(tr("Looking for gloves…"))
+        elif search.state == "failed":
+            self._line(search.message, fg=T.DANGER)
+        elif search.state == "done" and not found:
+            self._line(tr("No gloves found. Switch them on, and disconnect them from other "
+                          "headsets."))
+        if found:
+            card = Surface(self.body)
+            card.pack(fill="x", pady=(10, 0))
+            for i, g in enumerate(found):
+                if i:
+                    Divider(card).pack(fill="x")
+                self._found_row(card, g, saved_by.get(g.address.upper()), usable)
+
+    def _glove_label(self, address: str, hand: str = "") -> str:
+        """The name given to this glove, or its hand and the end of its address."""
+        name = self.model.glove_name(address)
+        if name:
+            return name
+        tag = address.replace(":", "")[-4:].upper()
+        return tr("{hand} glove · {tag}", hand=tr(hand.capitalize()), tag=tag) if hand \
+            else tr("Glove · {tag}", tag=tag)
+
+    def _line(self, text: str, fg=None):
+        tk.Label(self.body, text=text, bg=T.SURFACE, fg=fg or T.TEXT_MUTED, font=T.font(12.5),
+                 anchor="w", justify="left", wraplength=640).pack(fill="x", pady=(8, 0))
+
+    def _found_row(self, card, g: R.NearbyGlove, saved_for: str | None, usable: bool):
+        row = tk.Frame(card, bg=T.RAISED)
+        row.pack(fill="x", padx=14, pady=8)
+        bars = SignalBars(row)
+        bars.set(g.rssi or None)
+        bars.pack(side="left", padx=(0, 12))
+        if self._renaming == g.address:
+            box = _entry(row, width=22)
+            box.insert(0, self.model.glove_name(g.address))
+            box.pack(side="left", ipady=3)
+            box.bind("<Return>", lambda e: self._rename_done(g.address, box.get()))
+            box.bind("<Escape>", lambda e: self._rename_done(None, ""))
+            box.bind("<FocusOut>", lambda e: self._rename_done(g.address, box.get()))
+            box.after_idle(box.focus_set)
+        else:
+            name = tk.Label(row, text=self._glove_label(g.address, g.hand), bg=T.RAISED, fg=T.TEXT,
+                            font=T.font(13.5, 600), anchor="w", cursor="xterm")
+            name.pack(side="left")
+            name.bind("<Double-Button-1>", lambda e: self._rename(g.address))
+            Tooltip(name, lambda: tr("Double-click to rename"))
+
+        # On the right: the glove already chosen, or the button that chooses it.
+        if saved_for:
+            tk.Label(row, text="✓ " + tr(saved_for.capitalize()), bg=T.RAISED, fg=T.SUCCESS,
+                     font=T.font(12.5, 600)).pack(side="right")
+            return
+        for hand in reversed([g.hand] if g.hand else list(R.HANDS)):
+            label = tr("Connect") if g.hand else tr(hand.capitalize())
+            b = Button(row, label, height=30, padx=14, font=T.font(12.5, 600),
+                       command=lambda h=hand: self.model.connect_glove_to(self.key, h, g.address))
+            b.set(disabled=not usable)
+            b.pack(side="right", padx=(8, 0))
+
+    def _find(self):
+        self.model.search_gloves(self.key)
+
+    def _rename(self, address: str):
+        self._renaming = address
+        self._shown = None
+
+    def _rename_done(self, address: str | None, name: str):
+        if self._renaming is None:
+            return
+        if address:
+            self.model.rename_glove(address, name)
+        self._renaming = None
+        self._shown = None
 
 def _clock(seconds: float) -> str:
     seconds = int(seconds)

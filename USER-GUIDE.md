@@ -305,11 +305,31 @@ middle of it, keeping its lower part, where hands are.
   connected connects; a connected one offers **Disconnect**. The headset does
   the connecting, over its own Bluetooth. A glove talks to one thing at a time,
   so if this computer (or a phone) has it, disconnect it there first.
+- **Gloves** — which glove each hand of the headset keeps to. Every left glove
+  calls itself the same thing, and so does every right one, so with several
+  sets switched on in one room a headset takes whichever answers first. Once a
+  hand has connected, it keeps to that glove's address. To choose:
+  1. Press **Find gloves**. For about 8 seconds the headset looks, then lists
+     every glove switched on nearby, nearest first (the bars are signal
+     strength). A glove already connected to another headset is not listed.
+     A glove with no name shows its hand and four characters, like
+     *Left glove · B2C3*.
+  2. Double-click a name to rename it, like *Kit 3 Left*: write it on a sticker
+     on the glove too. The name belongs to that glove, on this computer, so it
+     shows on every headset.
+  3. **Connect** connects that glove. The headset keeps to it from then on,
+     after a drop and the next time the app starts; the list marks it ✓.
+
+  The top of the section says which glove each hand keeps to. **Forget** goes
+  back to taking the first glove found. The app needs **HexR 0.10.6 or newer**.
 - **Release all** vents both gloves.
+- **Trigger all** presses every finger and the palm of the connected gloves
+  for a second, then lets go: a quick check that a glove is connected and
+  working. The app needs **HexR 0.10.6 or newer**.
 - **Recenter** — puts the wearer back on the scene's starting spot, facing its
   front, for someone who has wandered off or was handed the headset facing the
   wrong way. Works on Quest and PICO alike. A tick shows it worked. The app
-  needs **HexR 0.11.0 or newer**; on an older one the button is greyed out.
+  needs **HexR 0.10.6 or newer**; on an older one the button is greyed out.
 - **Record** — records the view, the app's sound and what the gloves did, in
   *Videos\HEXR Companion\Recordings* (*Movies/HEXR Companion/Recordings* on a
   Mac). While it records the button shows the
@@ -322,8 +342,9 @@ middle of it, keeping its lower part, where hands are.
   microphone, but Android asks the wearer once, the first time, to allow the
   microphone all the same, just before the screen-sharing prompt: they choose
   **Allow**. A wearer who says no still shares the view, and the recording has
-  no sound; **Details** says why. You hear nothing on this computer while you
-  watch: the sound goes into the recording.
+  no sound; **Details** says why. While you watch, the sound plays on this
+  computer too; **Sound on** beside **Record** turns that off (the recording
+  keeps the sound either way).
 - **Full screen** — the **⛶** button, or double-click the view. The picture
   alone, on a second display if one is connected (a projector or TV), or on
   this one. **Esc** leaves and **R** records.
