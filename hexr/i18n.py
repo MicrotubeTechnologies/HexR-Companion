@@ -157,6 +157,7 @@ ZH: dict[str, str] = {
     # -- headsets
     "Add": "添加",
     "Find gloves": "查找手套",
+    "Gloves found": "已找到的手套",
     "Update this app to HexR 0.10.6 or later to pick gloves.":
         "请将此应用更新到 HexR 0.10.6 或更高版本，才能选择手套。",
     "Any glove": "任意手套",

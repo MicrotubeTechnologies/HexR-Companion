@@ -20,7 +20,7 @@ from ..gloveview import GloveView
 from ..haptics import FINGERS, HandState, level_from_kpa
 from ..i18n import N_, language, tr
 from ..state import HANDS
-from ..widgets import Button, Dot, SignalBars
+from ..widgets import Button, Divider, Dot, SignalBars, Surface
 from .base import Screen
 
 SCAN_TITLE = N_("Connect a glove")
@@ -31,6 +31,8 @@ SCAN_PAUSE_MS = 1500      # between one search and the next
 RETRY_MS = 10000          # after Bluetooth failed, try again this much later
 FORGET_S = 20.0           # a glove not heard from in this long has gone
 DOTS_EVERY = 8            # ticks per step of the searching dots
+FULL_PAUSE_MS = 4000      # between searches while both hands are connected: the list stays fresh
+SWAP_WAIT_S = 6.0         # how long a swap waits for the old glove to let go
 
 GREEN = tuple(int(T.SUCCESS[i:i + 2], 16) for i in (1, 3, 5))
 
@@ -51,10 +53,16 @@ class ConnectScreen(Screen):
         self._scan_after = None
         self._ticks = 0
         self._dots = 0
+        self._listed = None       # what the list was last drawn from
+        self._full_scans = 0
+        self._swap: tuple[dict, float] | None = None   # a glove waiting for its hand to be free
 
         row = tk.Frame(self.body, bg=T.SURFACE)
         row.pack(fill="both", expand=True)
         self.slots = {hand: self._slot(row, hand) for hand in HANDS}
+        # Every glove found, for testing one after another: Test swaps that hand over to it.
+        self.list = tk.Frame(self.body, bg=T.SURFACE)
+        self.list.pack(fill="x", pady=(14, 0))
         self.show_details(self.details)
 
     def _slot(self, parent, hand: str) -> SimpleNamespace:
@@ -127,9 +135,15 @@ class ConnectScreen(Screen):
         engine = self.app.engine
         gloves = self.app.state.gloves.values()
         busy = any(g.connecting for g in gloves)
-        wanted = not all((g := self.app.state.get(h)) and g.connected for h in HANDS)
-        if engine.scanning or busy or not wanted:
+        full = all((g := self.app.state.get(h)) and g.connected for h in HANDS)
+        if engine.scanning or busy:
             self._schedule(SCAN_PAUSE_MS)
+            return
+        # Both hands connected: still searching, less often, so the list shows gloves switched on
+        # since, ready to test next.
+        self._full_scans += 1
+        if full and self._full_scans % 2:
+            self._schedule(FULL_PAUSE_MS)
             return
         engine.scan(self._on_result, self._on_done)
 
@@ -164,6 +178,77 @@ class ConnectScreen(Screen):
         return sorted((f for f in self.found.values() if f["hand"] == hand),
                       key=lambda f: f.get("rssi") if f.get("rssi") is not None else -999,
                       reverse=True)
+
+    # -- every glove found, to test one after another ----------------------------------------
+
+    def _test(self, found: dict):
+        """Test this glove: its hand lets go of the glove it has, then takes this one."""
+        hand = found["hand"]
+        g = self.app.state.get(hand)
+        if g and (g.connected or g.connecting):
+            self.app.disconnect(hand)
+            self._swap = (found, time.monotonic())
+            self.after(200, self._finish_swap)
+        else:
+            self._connect(found)
+
+    def _finish_swap(self):
+        if self._swap is None or not self.winfo_exists():
+            return
+        found, since = self._swap
+        g = self.app.state.get(found["hand"])
+        if g and (g.connected or g.connecting) and time.monotonic() - since < SWAP_WAIT_S:
+            self.after(200, self._finish_swap)
+            return
+        self._swap = None
+        self._connect(found)
+
+    def _draw_list(self):
+        """One row per glove: the ones connected here, then the rest found, nearest first."""
+        connected = [g for h in HANDS if (g := self.app.state.get(h)) and (g.connected or g.connecting)]
+        here = {g.address.upper() for g in connected}
+        others = sorted((f for f in self.found.values() if f["address"].upper() not in here),
+                        key=lambda f: f.get("rssi") if f.get("rssi") is not None else -999,
+                        reverse=True)
+        names = tuple(self._glove_label(a) for a in [g.address for g in connected] +
+                      [f["address"] for f in others])
+        shown = (tuple((g.hand, g.address, g.connected) for g in connected),
+                 tuple((f["address"], f["hand"], SignalBars.bars(f.get("rssi"))) for f in others),
+                 names, self._swap is not None)
+        if shown == self._listed:
+            return
+        self._listed = shown
+        for child in self.list.winfo_children():
+            child.destroy()
+        if not connected and not others:
+            return
+        tk.Label(self.list, text=T.track(tr("Gloves found")), bg=T.SURFACE, fg=T.TEXT_FAINT,
+                 font=T.font(10), anchor="w").pack(fill="x")
+        card = Surface(self.list)
+        card.pack(fill="x", pady=(6, 0))
+        rows = [(g.address, g.hand, None, "connected" if g.connected else "connecting")
+                for g in connected] + [(f["address"], f["hand"], f, "found") for f in others]
+        for i, (address, hand, found, state) in enumerate(rows):
+            if i:
+                Divider(card).pack(fill="x")
+            row = tk.Frame(card, bg=T.RAISED)
+            row.pack(fill="x", padx=14, pady=7)
+            bars = SignalBars(row)
+            bars.set(found.get("rssi") if found else None)
+            bars.pack(side="left", padx=(0, 12))
+            tk.Label(row, text=self._glove_label(address), bg=T.RAISED, fg=T.TEXT,
+                     font=T.font(13.5, 600)).pack(side="left")
+            tk.Label(row, text=tr(hand), bg=T.RAISED, fg=T.TEXT_MUTED,
+                     font=T.font(12.5)).pack(side="left", padx=(10, 0))
+            if state == "connected":
+                tk.Label(row, text="✓ " + tr("Connected"), bg=T.RAISED, fg=T.SUCCESS,
+                         font=T.font(12.5, 600)).pack(side="right")
+            elif state == "connecting" or self._swap is not None:
+                tk.Label(row, text=tr("Connecting…") if state == "connecting" else "",
+                         bg=T.RAISED, fg=T.TEXT_MUTED, font=T.font(12.5)).pack(side="right")
+            else:
+                Button(row, tr("Test"), command=lambda f=found: self._test(f), height=30,
+                       padx=14, font=T.font(12.5, 600)).pack(side="right")
 
     # -- what each glove's slot says ------------------------------------------------------------
 
@@ -212,6 +297,7 @@ class ConnectScreen(Screen):
     def refresh(self):
         for hand, slot in self.slots.items():
             self._update(hand, slot)
+        self._draw_list()
 
     def _update(self, hand: str, slot: SimpleNamespace):
         g = self.app.state.get(hand)
