@@ -95,7 +95,8 @@ fun GlovesDialog(vm: HeadsetsViewModel, row: HeadsetRow, onClose: () -> Unit) {
                 }
 
                 for (g in search.found) {
-                    FoundGlove(vm, row, g, savedBy[g.address.uppercase()], usable) { renaming = g.address }
+                    val savedFor = savedBy[g.address.uppercase()]
+                    FoundGlove(vm, row, g, savedFor, savedFor?.let { s.glove(it)?.state }.orEmpty(), usable) { renaming = g.address }
                 }
             }
         },
@@ -117,6 +118,8 @@ private fun FoundGlove(
     row: HeadsetRow,
     g: NearbyGlove,
     savedFor: String?,
+    /** That hand's state, when this glove is the one it keeps to. */
+    savedState: String,
     usable: Boolean,
     onRename: () -> Unit,
 ) {
@@ -126,11 +129,16 @@ private fun FoundGlove(
             Label(vm.gloveName(g.address), weight = FontWeight.SemiBold)
             if (g.hand.isNotEmpty()) Caption(tr(g.hand.replaceFirstChar { it.uppercase() }), size = P.SMALL)
         }
-        if (savedFor != null) {
+        // The glove chosen and connected, or what connects it. One chosen for a hand that is not
+        // connected now (it dropped, the headset slept) connects again from here too.
+        if (savedFor != null && savedState == "connected") {
             Label("✓ " + tr(savedFor.replaceFirstChar { it.uppercase() }), color = T.GREEN, weight = FontWeight.SemiBold)
-        } else if (g.hand.isNotEmpty()) {
+        } else if (savedFor != null && savedState == "connecting") {
+            Label(tr("Connecting…"), color = T.TEXT_2)
+        } else if (savedFor != null || g.hand.isNotEmpty()) {
+            val hand = savedFor ?: g.hand
             TextLink(tr("Connect"), color = if (usable) T.ACCENT else T.TEXT_5) {
-                if (usable) vm.connectGloveAt(row.key, g.hand, g.address)
+                if (usable) vm.connectGloveAt(row.key, hand, g.address)
             }
         } else {
             for (hand in listOf("left", "right")) {
