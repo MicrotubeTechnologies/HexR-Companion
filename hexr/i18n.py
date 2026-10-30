@@ -161,8 +161,6 @@ ZH: dict[str, str] = {
         "请将此应用更新到 HexR 0.10.6 或更高版本，才能选择手套。",
     "Any glove": "任意手套",
     "Looking for gloves…": "正在查找手套…",
-    "{hand} glove · {tag}": "{hand}手套 · {tag}",
-    "Glove · {tag}": "手套 · {tag}",
     "Double-click to rename": "双击重命名",
     "Sound on": "声音：开",
     "Sound off": "声音：关",

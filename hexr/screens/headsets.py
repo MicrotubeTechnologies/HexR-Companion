@@ -17,13 +17,14 @@ import time
 import tkinter as tk
 
 from .. import recorder as REC
+from .. import glovenames
 from .. import remote as R
 from .. import settings
 from .. import speaker as SPK
 from .. import theme as T
 from ..haptics import HapticsTimeline
 from ..headsets import Headsets, HeadsetRow
-from ..i18n import N_, tr
+from ..i18n import N_, language, tr
 from ..viewer import LANDSCAPE, Compositor, GloveBadge, boxes, frame_size, hit
 from ..widgets import (Button, Divider, Dot, SignalBars, StatusChip, Surface, TextLink, Tooltip,
                        icon_fullscreen, icon_more)
@@ -990,13 +991,10 @@ class _GloveFinder(tk.Frame):
                 self._found_row(card, g, saved_by.get(g.address.upper()), usable)
 
     def _glove_label(self, address: str, hand: str = "") -> str:
-        """The name given to this glove, or its hand and the end of its address."""
-        name = self.model.glove_name(address)
-        if name:
-            return name
-        tag = address.replace(":", "")[-4:].upper()
-        return tr("{hand} glove · {tag}", hand=tr(hand.capitalize()), tag=tag) if hand \
-            else tr("Glove · {tag}", tag=tag)
+        """The name given to this glove here, or else its own name from its address, the one
+        every HEXR Companion gives it."""
+        return self.model.glove_name(address) or \
+            glovenames.auto_name(address, chinese=language() == "zh")
 
     def _line(self, text: str, fg=None):
         tk.Label(self.body, text=text, bg=T.SURFACE, fg=fg or T.TEXT_MUTED, font=T.font(12.5),
@@ -1010,7 +1008,7 @@ class _GloveFinder(tk.Frame):
         bars.pack(side="left", padx=(0, 12))
         if self._renaming == g.address:
             box = _entry(row, width=22)
-            box.insert(0, self.model.glove_name(g.address))
+            box.insert(0, self._glove_label(g.address))
             box.pack(side="left", ipady=3)
             box.bind("<Return>", lambda e: self._rename_done(g.address, box.get()))
             box.bind("<Escape>", lambda e: self._rename_done(None, ""))
@@ -1022,6 +1020,9 @@ class _GloveFinder(tk.Frame):
             name.pack(side="left")
             name.bind("<Double-Button-1>", lambda e: self._rename(g.address))
             Tooltip(name, lambda: tr("Double-click to rename"))
+        if g.hand:
+            tk.Label(row, text=tr(g.hand.capitalize()), bg=T.RAISED, fg=T.TEXT_MUTED,
+                     font=T.font(12.5)).pack(side="left", padx=(10, 0))
 
         # On the right: the glove already chosen, or the button that chooses it.
         if saved_for:
@@ -1046,7 +1047,9 @@ class _GloveFinder(tk.Frame):
         if self._renaming is None:
             return
         if address:
-            self.model.rename_glove(address, name)
+            # Typing in the glove's own name is not a rename.
+            auto = glovenames.auto_name(address, chinese=language() == "zh")
+            self.model.rename_glove(address, "" if name.strip() == auto else name)
         self._renaming = None
         self._shown = None
 

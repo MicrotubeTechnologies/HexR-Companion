@@ -111,7 +111,7 @@ a = Analysis(
         'hexr.screens.test', 'hexr.screens.quicktest',
         'hexr.screens.headsets', 'hexr.screens.fullview', 'hexr.haptics',
         'hexr.overlay', 'hexr.viewer', 'hexr.recorder', 'PIL.ImageTk',
-        'hexr.sideload', 'hexr.screens.sideload', 'hexr.speaker',
+        'hexr.sideload', 'hexr.screens.sideload', 'hexr.speaker', 'hexr.glovenames',
     ],
     hookspath=[],
     runtime_hooks=[],
