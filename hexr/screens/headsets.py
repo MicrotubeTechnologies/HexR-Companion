@@ -954,16 +954,16 @@ class _GloveFinder(tk.Frame):
             return
 
         # Each hand, and the glove it keeps to.
-        saved_by = {}
+        saved_by = {}     # address -> (hand, that hand's state)
         hands = tk.Frame(self.body, bg=T.SURFACE)
         hands.pack(fill="x")
-        for hand, address, _state in saved:
+        for hand, address, state in saved:
             row = tk.Frame(hands, bg=T.SURFACE)
             row.pack(fill="x", pady=1)
             tk.Label(row, text=tr(hand.capitalize()), bg=T.SURFACE, fg=T.TEXT_MUTED,
                      font=T.font(12.5), width=6, anchor="w").pack(side="left")
             if address:
-                saved_by[address.upper()] = hand
+                saved_by[address.upper()] = (hand, state)
                 tk.Label(row, text=self._glove_label(address, hand), bg=T.SURFACE, fg=T.TEXT,
                          font=T.font(13, 600), anchor="w").pack(side="left")
                 if usable:
@@ -1000,7 +1000,7 @@ class _GloveFinder(tk.Frame):
         tk.Label(self.body, text=text, bg=T.SURFACE, fg=fg or T.TEXT_MUTED, font=T.font(12.5),
                  anchor="w", justify="left", wraplength=640).pack(fill="x", pady=(8, 0))
 
-    def _found_row(self, card, g: R.NearbyGlove, saved_for: str | None, usable: bool):
+    def _found_row(self, card, g: R.NearbyGlove, saved: tuple[str, str] | None, usable: bool):
         row = tk.Frame(card, bg=T.RAISED)
         row.pack(fill="x", padx=14, pady=8)
         bars = SignalBars(row)
@@ -1024,13 +1024,21 @@ class _GloveFinder(tk.Frame):
             tk.Label(row, text=tr(g.hand.capitalize()), bg=T.RAISED, fg=T.TEXT_MUTED,
                      font=T.font(12.5)).pack(side="left", padx=(10, 0))
 
-        # On the right: the glove already chosen, or the button that chooses it.
-        if saved_for:
-            tk.Label(row, text="✓ " + tr(saved_for.capitalize()), bg=T.RAISED, fg=T.SUCCESS,
-                     font=T.font(12.5, 600)).pack(side="right")
-            return
-        for hand in reversed([g.hand] if g.hand else list(R.HANDS)):
-            label = tr("Connect") if g.hand else tr(hand.capitalize())
+        # On the right: the glove chosen and connected, or the button that connects it. A glove
+        # chosen for a hand that is not connected now (it dropped, the headset slept) connects again
+        # from here too.
+        if saved:
+            hand, state = saved
+            if state == "connected":
+                tk.Label(row, text="✓ " + tr(hand.capitalize()), bg=T.RAISED, fg=T.SUCCESS,
+                         font=T.font(12.5, 600)).pack(side="right")
+                return
+            if state == "connecting":
+                tk.Label(row, text=tr("Connecting…"), bg=T.RAISED, fg=T.TEXT_MUTED,
+                         font=T.font(12.5)).pack(side="right")
+                return
+        for hand in reversed([saved[0]] if saved else [g.hand] if g.hand else list(R.HANDS)):
+            label = tr("Connect") if saved or g.hand else tr(hand.capitalize())
             b = Button(row, label, height=30, padx=14, font=T.font(12.5, 600),
                        command=lambda h=hand: self.model.connect_glove_to(self.key, h, g.address))
             b.set(disabled=not usable)
