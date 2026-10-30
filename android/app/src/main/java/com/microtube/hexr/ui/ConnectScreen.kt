@@ -1,5 +1,7 @@
 package com.microtube.hexr.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
 import com.microtube.hexr.GloveNames
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.core.animateFloatAsState
@@ -101,6 +103,7 @@ fun ConnectScreen(vm: HexrViewModel, panel: Boolean, onOpenBluetoothSettings: ()
                     }
                 }
             }
+            FoundList(vm)
             Spacer(Modifier.height(20.dp))
             Disclosure(tr("Details"), details, onToggle = { details = !details }) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -124,6 +127,62 @@ fun ConnectScreen(vm: HexrViewModel, panel: Boolean, onOpenBluetoothSettings: ()
                 }
             }
         }
+    }
+}
+
+/**
+ * Every glove found, for testing one after another: the ones connected here first, then the rest
+ * nearest first. Test swaps that hand over to the glove.
+ */
+@Composable
+private fun FoundList(vm: HexrViewModel) {
+    val context = LocalContext.current
+    val here = HANDS.mapNotNull { h -> vm.gloves[h]?.takeIf { it.connected || it.connecting }?.let { h to it } }
+    val hereAddresses = here.map { it.second.address.uppercase() }.toSet()
+    val others = vm.allFound().filter { it.address.uppercase() !in hereAddresses }
+    if (here.isEmpty() && others.isEmpty()) return
+    Spacer(Modifier.height(20.dp))
+    SectionLabel(tr("Gloves found"))
+    Spacer(Modifier.height(8.dp))
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(T.R_CTRL))
+            .background(T.CARD)
+            .border(1.dp, T.BORDER, RoundedCornerShape(T.R_CTRL))
+            .padding(horizontal = 14.dp, vertical = 4.dp),
+    ) {
+        for ((hand, g) in here) {
+            FoundRow(GloveNames.nameFor(context, g.address), hand, null) {
+                Text(
+                    if (g.connected) "✓ " + tr("Connected") else tr("Connecting…"),
+                    color = if (g.connected) T.GREEN else T.TEXT_2, fontSize = P.VALUE.sp, fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+        for (f in others) {
+            FoundRow(GloveNames.nameFor(context, f.address), f.hand, f.rssi) {
+                if (vm.swapping == null) {
+                    TextLink(tr("Test"), color = T.ACCENT) { vm.test(f) }
+                } else if (vm.swapping == f.address) {
+                    Text(tr("Connecting…"), color = T.TEXT_2, fontSize = P.VALUE.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FoundRow(name: String, hand: String, rssi: Int?, trailing: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = P.TOUCH), verticalAlignment = Alignment.CenterVertically) {
+        SignalBars(GloveSearch.signalBars(rssi))
+        Spacer(Modifier.size(12.dp))
+        Text(name, color = T.TEXT, fontSize = P.BODY.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Spacer(Modifier.size(8.dp))
+        Text(tr(hand), color = T.TEXT_2, fontSize = P.VALUE.sp)
+        Spacer(Modifier.weight(1f))
+        trailing()
     }
 }
 

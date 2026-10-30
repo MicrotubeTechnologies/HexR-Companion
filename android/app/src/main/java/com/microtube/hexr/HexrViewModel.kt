@@ -202,8 +202,10 @@ class HexrViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun search(now: Long) {
         GloveSearch.prune(seen, now)
+        // Searching goes on with both hands connected too, less often, so the list of gloves found
+        // shows the next ones to test.
         val wanted = permissionsGranted && bluetoothOn && connectVisible && foreground && !demo &&
-            HANDS.any { gloves[it]?.connected != true } && HANDS.none { gloves[it]?.connecting == true }
+            HANDS.none { gloves[it]?.connecting == true }
         if (!wanted) {
             if (engine.scanning) engine.stopScan()
             return
@@ -215,8 +217,11 @@ class HexrViewModel(app: Application) : AndroidViewModel(app) {
             onDone = { error ->
                 viewModelScope.launch {
                     scanError = error
-                    nextScanAt = SystemClock.elapsedRealtime() +
-                        if (error != null) GloveSearch.RETRY_MS else GloveSearch.RESCAN_MS
+                    nextScanAt = SystemClock.elapsedRealtime() + when {
+                        error != null -> GloveSearch.RETRY_MS
+                        HANDS.all { gloves[it]?.connected == true } -> GloveSearch.FULL_RESCAN_MS
+                        else -> GloveSearch.RESCAN_MS
+                    }
                 }
             },
         )
@@ -231,6 +236,32 @@ class HexrViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun disconnect(hand: String) = engine.disconnect(hand)
+
+    /** Every glove heard lately, either hand, strongest first: the list to test from. */
+    fun allFound(): List<Found> = seen.values.map { it.found }.sortedByDescending { it.rssi ?: Int.MIN_VALUE }
+
+    /** A glove its hand is letting go of another for, until it can connect. */
+    var swapping by mutableStateOf<String?>(null)
+        private set
+
+    /** Test this glove: its hand lets go of the glove it has, then takes this one. */
+    fun test(f: Found) {
+        val g = gloves[f.hand]
+        if (g == null || (!g.connected && !g.connecting)) {
+            connect(f)
+            return
+        }
+        disconnect(f.hand)
+        swapping = f.address
+        viewModelScope.launch {
+            val until = SystemClock.elapsedRealtime() + 6_000L
+            while (SystemClock.elapsedRealtime() < until && gloves[f.hand]?.let { it.connected || it.connecting } == true) {
+                kotlinx.coroutines.delay(200)
+            }
+            swapping = null
+            connect(f)
+        }
+    }
 
     // -- the Test tab ------------------------------------------------------------
 

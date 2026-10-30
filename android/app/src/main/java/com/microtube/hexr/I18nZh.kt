@@ -14,6 +14,7 @@ internal val ZH: Map<String, String> = mapOf(
     "Update this app to HexR 0.10.6 or later to pick gloves." to "请将此应用更新到 HexR 0.10.6 或更高版本，才能选择手套。",
     "Tap a name to rename it." to "点按名称即可重命名。",
     "Trigger all" to "全部触发",
+    "Gloves found" to "已找到的手套",
     // -- quick test
     "All good" to "全部良好",
     "{n} poor" to "{n} 个偏弱",
