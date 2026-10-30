@@ -5,14 +5,16 @@ package com.microtube.hexr
  *
  * Every left glove advertises the same name, and so does every right one, so the only thing that
  * tells two arm modules apart is the address, which nobody can remember. This turns the address
- * into two words, an adjective and an animal ("Amber Otter"), the same way everywhere: any HEXR
+ * into an adjective, an animal and a number ("Amber Otter 4"), the same way everywhere: any HEXR
  * Companion, phone or computer, names the same glove the same, with nothing shared between them
  * and nothing to set up. A name someone types in still wins, on that device.
  *
  * The recipe, which the desktop's hexr/glovenames.py follows exactly:
  *  1. the address's hex digits, upper case, nothing else ("D4:3D:39:A1:B2:C3" -> "D43D39A1B2C3");
  *  2. their FNV-1a 32-bit hash (offset basis 2166136261, prime 16777619, over the ASCII bytes);
- *  3. adjective = ADJECTIVES[hash % 64], animal = ANIMALS[(hash >> 6) % 64].
+ *  3. adjective = ADJECTIVES[hash % 64], animal = ANIMALS[(hash >> 6) % 64],
+ *     number = (hash >> 12) % 10 + 1;
+ *  4. "Adjective Animal N" in English, 形容词动物N号 in Chinese. 40960 names.
  * The lists are part of the recipe: never reorder or change an entry, or every glove gets a new
  * name. GloveNamesTest holds the reference names both apps are tested against.
  */
@@ -65,11 +67,12 @@ object GloveNames {
         return h
     }
 
-    /** The glove's own name, from its address: "Amber Otter", or "琥珀水獭" in Chinese. */
+    /** The glove's own name, from its address: "Amber Otter 4", or "琥珀水獭4号" in Chinese. */
     fun autoName(address: String, chinese: Boolean = false): String {
         val h = hash(address)
         val adjective = ADJECTIVES[(h % 64).toInt()]
         val animal = ANIMALS[((h shr 6) % 64).toInt()]
-        return if (chinese) adjective.second + animal.second else "${adjective.first} ${animal.first}"
+        val number = (h shr 12) % 10 + 1
+        return if (chinese) "${adjective.second}${animal.second}${number}号" else "${adjective.first} ${animal.first} $number"
     }
 }
