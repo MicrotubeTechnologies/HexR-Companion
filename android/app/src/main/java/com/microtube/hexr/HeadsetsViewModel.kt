@@ -87,6 +87,13 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
     /** The headsets this phone wants to watch, by key. */
     private var watching by mutableStateOf<Set<String>>(emptySet())
 
+    /**
+     * Names given to gloves on this phone, by Bluetooth address. A glove with none goes by its own
+     * name from its address (GloveNames), the one every HEXR Companion gives it.
+     */
+    var gloveNames by mutableStateOf(loadGloveNames())
+        private set
+
     /** Listening and connected: the tab is on screen and the app in front. No view plays otherwise. */
     var online by mutableStateOf(false)
         private set
@@ -198,6 +205,40 @@ class HeadsetsViewModel(app: Application) : AndroidViewModel(app), HeadsetLink.L
     fun disconnectGlove(key: String, hand: String) = send(key, RemoteProtocol.glove("disconnect", hand))
 
     fun release(key: String) = send(key, RemoteProtocol.release())
+
+    /** Every channel of the connected gloves pressed for a second: does the glove work? */
+    fun trigger(key: String) = send(key, RemoteProtocol.trigger())
+
+    // -- picking one glove out of several, by its address --------------------------
+
+    /** The headset lists every glove in range; the result comes in its status. */
+    fun searchGloves(key: String) = send(key, RemoteProtocol.gloveSearch())
+
+    /** That exact glove, which the headset then keeps to for this hand. */
+    fun connectGloveAt(key: String, hand: String, address: String) =
+        send(key, RemoteProtocol.connectGloveAt(hand, address))
+
+    /** The headset goes back to taking the first glove of this hand it finds. */
+    fun forgetGlove(key: String, hand: String) = send(key, RemoteProtocol.glove("forget", hand))
+
+    /** What this phone calls the glove at this address: the name given here, or its own. */
+    fun gloveName(address: String): String =
+        gloveNames[address.uppercase()] ?: GloveNames.autoName(address, chinese = I18n.language == I18n.ZH_CN)
+
+    /** Names a glove by its address on this phone. Blank, or its own name, clears it. */
+    fun renameGlove(address: String, name: String) {
+        val key = address.uppercase()
+        val own = GloveNames.autoName(address, chinese = I18n.language == I18n.ZH_CN)
+        prefs.edit().apply {
+            if (name.isBlank() || name.trim() == own) remove("glove:$key") else putString("glove:$key", name.trim())
+        }.apply()
+        gloveNames = loadGloveNames()
+    }
+
+    private fun loadGloveNames(): Map<String, String> =
+        prefs.all.filterKeys { it.startsWith("glove:") }
+            .mapNotNull { (k, v) -> (v as? String)?.let { k.removePrefix("glove:") to it } }
+            .toMap()
 
     /** Put the wearer back on the scene's starting spot. The button says it was done, for a moment. */
     fun recenter(key: String) {

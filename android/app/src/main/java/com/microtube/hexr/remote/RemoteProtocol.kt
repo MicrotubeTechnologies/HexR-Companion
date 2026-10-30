@@ -32,13 +32,23 @@ object RemoteProtocol {
 
     fun release() = """{"type":"release"}"""
 
+    /** Every channel of the connected gloves pressed for a second, then let go (HexR 0.10.6 on). */
+    fun trigger() = """{"type":"trigger"}"""
+
+    /** Every glove in range, listed in the status's gloveSearch about 8 s later (HexR 0.10.6 on). */
+    fun gloveSearch() = """{"type":"glove","action":"search"}"""
+
+    /** That exact glove for this hand, which the headset then keeps to (HexR 0.10.6 on). */
+    fun connectGloveAt(hand: String, address: String) =
+        """{"type":"glove","action":"connect","hand":${str(hand.lowercase())},"address":${str(address)}}"""
+
     fun scene(index: Int) = """{"type":"scene","index":$index}"""
 
     fun command(id: String) = """{"type":"command","id":${str(id)}}"""
 
     fun stream(action: String) = """{"type":"stream","action":${str(action)}}"""
 
-    /** Put the wearer back on the scene's starting spot, facing its front (HexR 0.11.0 on). */
+    /** Put the wearer back on the scene's starting spot, facing its front (HexR 0.10.6 on). */
     fun recenter() = """{"type":"recenter"}"""
 
     /**
@@ -130,6 +140,7 @@ object RemoteProtocol {
                 message = g.optString("message"),
                 batteryPct = g.optInt("batteryPct", -1),
                 pressureDeciKPa = g.optJSONArray("pressureDeciKPa").ints(),
+                savedAddress = g.optString("savedAddress"),
             )
         },
         stream = o.optJSONObject("stream")?.let { s ->
@@ -150,6 +161,22 @@ object RemoteProtocol {
         allowRecenter = o.optBoolean("allowRecenter", false),
         haptics = o.optBoolean("haptics", false),
         clockUs = longOf(o.opt("clockUs"), 0L),
+        gloveSearch = o.optJSONObject("gloveSearch")?.let { gs ->
+            RemoteGloveSearch(
+                state = gs.optString("state", "idle"),
+                message = gs.optString("message"),
+                found = gs.optJSONArray("found").objects()
+                    .filter { it.optString("address").isNotEmpty() }
+                    .map {
+                        NearbyGlove(
+                            address = it.optString("address"),
+                            name = it.optString("name"),
+                            hand = it.optString("hand").takeIf { h -> h == "left" || h == "right" }.orEmpty(),
+                            rssi = intOf(it.opt("rssi"), 0),
+                        )
+                    },
+            )
+        },
     )
 
     /**
@@ -278,12 +305,14 @@ data class HeadsetStatus(
     val allowVideo: Boolean,
     val exposeScenes: Boolean,
     val controllers: Int,
-    /** The app lets this phone recenter the wearer (HexR 0.11.0 with Allow Recenter). */
+    /** The app lets this phone recenter the wearer (HexR 0.10.6 with Allow Recenter). */
     val allowRecenter: Boolean = false,
     /** The app sends a "haptics" line for every command (HexR 0.10.2 on). */
     val haptics: Boolean = false,
     /** The headset's clock when it sent this, in microseconds: the one its video is stamped with. */
     val clockUs: Long = 0L,
+    /** The last search for gloves in range. Null from a headset before HexR 0.10.6, which cannot search. */
+    val gloveSearch: RemoteGloveSearch? = null,
 ) {
     fun glove(hand: String): GloveState? = gloves.firstOrNull { it.hand.equals(hand, ignoreCase = true) }
 }
@@ -304,6 +333,24 @@ data class HapticsUpdate(val hand: String, val tUs: Long, val channels: List<Hap
 
 data class CommandInfo(val id: String, val label: String)
 
+/** The headset's last search for every glove in range. */
+data class RemoteGloveSearch(
+    val state: String = "idle",     // idle | searching | done | failed
+    val message: String = "",
+    /** Nearest first. */
+    val found: List<NearbyGlove> = emptyList(),
+)
+
+data class NearbyGlove(
+    val address: String,
+    /** What it advertises, e.g. "HaptGloveAR Left". */
+    val name: String,
+    /** left | right from that name, or "" when it does not say. */
+    val hand: String = "",
+    /** dBm, nearer 0 is closer; 0 when unknown. */
+    val rssi: Int = 0,
+)
+
 data class GloveState(
     val hand: String,
     val state: String,
@@ -311,6 +358,8 @@ data class GloveState(
     val batteryPct: Int,
     /** Thumb, index, middle, ring, pinky, palm, then the source tank. Tenths of a kPa, gauge. */
     val pressureDeciKPa: List<Int>,
+    /** The glove this hand keeps to (HexR 0.10.6 on); empty when it takes the first it finds. */
+    val savedAddress: String = "",
 ) {
     val connected get() = state == "connected"
     val connecting get() = state == "connecting"

@@ -5,6 +5,15 @@ package com.microtube.hexr
  * stays the source of truth: change the English, and I18nTest says this needs the new key.
  */
 internal val ZH: Map<String, String> = mapOf(
+    // -- a headset's gloves
+    "Find gloves" to "查找手套",
+    "Searching…" to "正在查找…",
+    "Any glove" to "任意手套",
+    "Looking for gloves…" to "正在查找手套…",
+    "No gloves found. Switch them on, and disconnect them from other headsets." to "未找到手套。请打开手套，并从其他头显上断开连接。",
+    "Update this app to HexR 0.10.6 or later to pick gloves." to "请将此应用更新到 HexR 0.10.6 或更高版本，才能选择手套。",
+    "Tap a name to rename it." to "点按名称即可重命名。",
+    "Trigger all" to "全部触发",
     // -- quick test
     "All good" to "全部良好",
     "{n} poor" to "{n} 个偏弱",
@@ -128,7 +137,7 @@ internal val ZH: Map<String, String> = mapOf(
     "Watch to see what they see." to "点击“观看”即可看到佩戴者所见。",
     "Off" to "关",
     "Watch asks the wearer to share." to "点击“观看”会请佩戴者共享画面。",
-    "Needs HexR 0.11.0 with Allow Recenter." to "需要 HexR 0.11.0 并开启 Allow Recenter。",
+    "Needs HexR 0.10.6 with Allow Recenter." to "需要 HexR 0.10.6 并开启 Allow Recenter。",
     "This phone has a glove for this hand; disconnect it on the Test tab first." to "本手机已连接这只手的手套；请先在“测试”页断开。",
     "This app does not let a phone connect its gloves." to "此应用不允许手机连接其手套。",
     "The glove shows the pressure the gloves measure. Update this app to HexR 0.10.2 or newer to show every touch and vibration as it is sent." to "手套显示的是手套测得的压力。将此应用更新到 HexR 0.10.2 或更高版本，即可实时显示每一次触碰和振动。",

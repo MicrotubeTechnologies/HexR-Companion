@@ -124,6 +124,7 @@ fun HeadsetLive(vm: HeadsetsViewModel, row: HeadsetRow, phoneGloves: Set<String>
     val video = remember(row.key) { CastVideo() }
     var fullScreen by rememberSaveable { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
+    var showGloves by remember { mutableStateOf(false) }
 
     val connected = row.link == HeadsetLink.State.Connected && s != null
     val playView = row.watching && stream.live && vm.online
@@ -179,7 +180,7 @@ fun HeadsetLive(vm: HeadsetsViewModel, row: HeadsetRow, phoneGloves: Set<String>
     }
     val recenterWhyNot = when {
         !connected -> tr("Reconnecting…")
-        !s!!.allowRecenter -> tr("Needs HexR 0.11.0 with Allow Recenter.")
+        !s!!.allowRecenter -> tr("Needs HexR 0.10.6 with Allow Recenter.")
         s.paused -> tr("Asleep. Put the headset on.")
         else -> null
     }
@@ -188,11 +189,15 @@ fun HeadsetLive(vm: HeadsetsViewModel, row: HeadsetRow, phoneGloves: Set<String>
         watching = row.watching,
         canWatch = canWatch,
         canRelease = canControl && s!!.gloves.any { it.connected },
+        canTrigger = canControl && s!!.gloveSearch != null && s.gloves.any { it.connected },
+        canGloves = connected,
         canRecenter = recenterWhyNot == null,
         recentered = recentered && row.error == null,
         playing = video.state is VideoPlayer.VideoState.Playing,
         onWatch = { if (row.watching) vm.stopWatching(row.key, video.joined) else vm.watch(row.key) },
         onRelease = { vm.release(row.key) },
+        onTrigger = { vm.trigger(row.key) },
+        onGloves = { showGloves = true },
         onRecenter = { vm.recenter(row.key) },
         onRecenterWhyNot = { note = recenterWhyNot },
         onFullScreen = { fullScreen = true },
@@ -261,6 +266,8 @@ fun HeadsetLive(vm: HeadsetsViewModel, row: HeadsetRow, phoneGloves: Set<String>
             ActionBar(actions)
         }
     }
+
+    if (showGloves) GlovesDialog(vm, row, onClose = { showGloves = false })
 }
 
 private const val RECENTERED_MS = 3000L
@@ -270,11 +277,15 @@ private class LiveActions(
     val watching: Boolean,
     val canWatch: Boolean,
     val canRelease: Boolean,
+    val canTrigger: Boolean,
+    val canGloves: Boolean,
     val canRecenter: Boolean,
     val recentered: Boolean,
     val playing: Boolean,
     val onWatch: () -> Unit,
     val onRelease: () -> Unit,
+    val onTrigger: () -> Unit,
+    val onGloves: () -> Unit,
     val onRecenter: () -> Unit,
     val onRecenterWhyNot: () -> Unit,
     val onFullScreen: () -> Unit,
@@ -529,10 +540,12 @@ private fun ActionBar(a: LiveActions) {
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 WatchButton(a, Modifier.weight(1f), P.ACTION)
+                GlovesButton(a, P.ACTION)
                 FullScreenButton(enabled = a.playing, onClick = a.onFullScreen)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ReleaseButton(a, Modifier.weight(1f))
+                TriggerButton(a, Modifier.weight(1f))
                 RecenterButton(a, Modifier.weight(1f))
             }
         }
@@ -554,6 +567,18 @@ private fun WatchButton(a: LiveActions, modifier: Modifier, height: androidx.com
 @Composable
 private fun ReleaseButton(a: LiveActions, modifier: Modifier) {
     ActionButton(tr("Release all"), modifier, style = ActionStyle.Ghost, enabled = a.canRelease, height = P.TOUCH, onClick = a.onRelease)
+}
+
+/** Every channel of the connected gloves pressed for a second: does the glove work? */
+@Composable
+private fun TriggerButton(a: LiveActions, modifier: Modifier) {
+    ActionButton(tr("Trigger all"), modifier, style = ActionStyle.Ghost, enabled = a.canTrigger, height = P.TOUCH, onClick = a.onTrigger)
+}
+
+/** Which glove each hand connects to, and finding the right one among several. */
+@Composable
+private fun GlovesButton(a: LiveActions, height: androidx.compose.ui.unit.Dp) {
+    ActionButton(tr("Gloves"), style = ActionStyle.Ghost, enabled = a.canGloves, height = height, onClick = a.onGloves)
 }
 
 @Composable
@@ -677,6 +702,7 @@ private fun Overlay(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     WatchButton(actions, Modifier.weight(1.3f), P.TOUCH)
                     ReleaseButton(actions, Modifier.weight(1f))
+                    TriggerButton(actions, Modifier.weight(1f))
                     RecenterButton(actions, Modifier.weight(1f))
                     if (!fullScreen) FullScreenButton(enabled = actions.playing, onClick = actions.onFullScreen)
                 }

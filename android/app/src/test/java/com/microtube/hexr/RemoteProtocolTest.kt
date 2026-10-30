@@ -1,6 +1,7 @@
 package com.microtube.hexr
 
 import com.microtube.hexr.remote.Message
+import com.microtube.hexr.remote.NearbyGlove
 import com.microtube.hexr.remote.RemoteProtocol
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -144,5 +145,45 @@ class RemoteProtocolTest {
         val big = RemoteProtocol.parsePacketHeader(bytes("00 01 00 00 01 00 00 00 00 00 00 00 00"))
         assertEquals(65536, big.length)
         assertTrue(big.config)
+    }
+
+    // -- picking a glove, and trigger all (HexR 0.10.6) --------------------------
+
+    @Test
+    fun gloveRequests_matchTheReferenceLines() {
+        assertEquals("""{"type":"glove","action":"search"}""", RemoteProtocol.gloveSearch())
+        assertEquals(
+            """{"type":"glove","action":"connect","hand":"left","address":"D4:3D:39:A1:B2:C3"}""",
+            RemoteProtocol.connectGloveAt("Left", "D4:3D:39:A1:B2:C3"),
+        )
+        assertEquals("""{"type":"glove","action":"forget","hand":"left"}""", RemoteProtocol.glove("forget", "left"))
+        assertEquals("""{"type":"trigger"}""", RemoteProtocol.trigger())
+    }
+
+    @Test
+    fun status_readsTheSavedGlovesAndTheLastSearch() {
+        val line = referenceStatus.dropLast(1).replace(
+            """"pressureDeciKPa":[10,0,0,0,0,0,452]}""",
+            """"pressureDeciKPa":[10,0,0,0,0,0,452],"savedAddress":"D4:3D:39:A1:B2:C3"}""",
+        ) + ""","gloveSearch":{"state":"done","message":"","found":[""" +
+            """{"address":"D4:3D:39:D4:E5:F6","name":"HaptGloveAR Right","hand":"right","rssi":-48},""" +
+            """{"address":"","name":"x"},{"address":"AA:BB","name":"HexR 07","hand":"up","rssi":"near"}]}}"""
+        val s = (RemoteProtocol.parseLine(line) as Message.Status).status
+        assertEquals("D4:3D:39:A1:B2:C3", s.glove("left")!!.savedAddress)
+        assertEquals("", s.glove("right")!!.savedAddress)
+        assertEquals("done", s.gloveSearch!!.state)
+        assertEquals(
+            listOf(
+                NearbyGlove("D4:3D:39:D4:E5:F6", "HaptGloveAR Right", "right", -48),
+                NearbyGlove("AA:BB", "HexR 07", "", 0),
+            ),
+            s.gloveSearch!!.found,
+        )
+    }
+
+    @Test
+    fun status_fromAHeadsetBefore0106_cannotSearch() {
+        val s = (RemoteProtocol.parseLine(referenceStatus) as Message.Status).status
+        assertNull(s.gloveSearch)
     }
 }
