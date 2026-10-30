@@ -1,5 +1,7 @@
 package com.microtube.hexr.ui
 
+import com.microtube.hexr.GloveNames
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -151,18 +153,22 @@ private fun Slot(vm: HexrViewModel, hand: String, panel: Boolean, gh: Float, mod
         Text(tr(hand), color = T.TEXT, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
         Row(Modifier.heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+            val context = LocalContext.current
+            // The glove's own name, the same as on every HEXR Companion and in HexR apps.
+            val name = { address: String -> " · " + GloveNames.nameFor(context, address) }
             val (word, dot) = when {
-                connected -> (tr("Connected") + if (g?.battery != "—") " · ${g?.battery}" else "") to
+                connected -> (tr("Connected") + (g?.let { name(it.address) } ?: "") +
+                    if (g?.battery != "—") " · ${g?.battery}" else "") to
                     if ((g?.batteryFraction ?: 1.0) < .2) T.AMBER else T.GREEN
-                connecting -> tr("Connecting…") to T.ACCENT
+                connecting -> (tr("Connecting…") + (g?.let { name(it.address) } ?: "")) to T.ACCENT
                 !vm.bluetoothOn || vm.scanError != null -> tr("Bluetooth unavailable") to T.RED
                 g?.failed == true && heard.isEmpty() -> tr("Could not connect") to T.RED
-                heard.isNotEmpty() -> tr("Found") to T.GREEN
+                heard.isNotEmpty() -> (tr("Found") + if (heard.size == 1) name(heard.first().address) else "") to T.GREEN
                 else -> searchingWord() to T.TEXT_5
             }
             Box(Modifier.size(8.dp).clip(CircleShape).background(dot))
             Spacer(Modifier.size(6.dp))
-            Text(word, color = T.TEXT_2, fontSize = P.VALUE.sp, maxLines = 1)
+            Text(word, color = T.TEXT_2, fontSize = P.VALUE.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (!connected && !connecting && heard.isNotEmpty()) {
                 Spacer(Modifier.size(6.dp))
                 SignalBars(GloveSearch.signalBars(heard.first().rssi))
@@ -201,7 +207,7 @@ private fun ConnectButton(heard: List<Found>, onPick: (Found) -> Unit) {
                 DropdownMenuItem(
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("${f.name} · ${GloveSearch.shortAddress(f.address)}", color = T.TEXT, fontSize = P.BODY.sp)
+                            Text(GloveNames.nameFor(LocalContext.current, f.address), color = T.TEXT, fontSize = P.BODY.sp)
                             Spacer(Modifier.size(10.dp))
                             SignalBars(GloveSearch.signalBars(f.rssi))
                         }

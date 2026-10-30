@@ -1,5 +1,7 @@
 package com.microtube.hexr
 
+import android.content.Context
+
 /**
  * A name for every glove, worked out from its Bluetooth address alone.
  *
@@ -66,6 +68,14 @@ object GloveNames {
         }
         return h
     }
+
+    /**
+     * What this phone calls the glove at this address: a name given to it on the Headsets tab, or
+     * else its own, in the app's language.
+     */
+    fun nameFor(context: Context, address: String): String =
+        context.getSharedPreferences("headsets", Context.MODE_PRIVATE).getString("glove:${address.uppercase()}", null)
+            ?: autoName(address, chinese = I18n.language == I18n.ZH_CN)
 
     /** The glove's own name, from its address: "Amber Otter 4", or "琥珀水獭4号" in Chinese. */
     fun autoName(address: String, chinese: Boolean = false): String {
