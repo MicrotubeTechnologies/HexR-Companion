@@ -2,16 +2,19 @@
 
 Every left glove advertises the same name, and so does every right one, so the only thing that
 tells two arm modules apart is the address, which nobody can remember. This turns the address
-into two words, an adjective and an animal ("Amber Otter"), the same way everywhere: any HEXR
+into an adjective, an animal and a number ("Amber Otter 4"), the same way everywhere: any HEXR
 Companion, on any computer or phone, names the same glove the same, with nothing shared between
 them and nothing to set up. A name someone types in still wins, on that device.
 
 The recipe, which the Android app (GloveNames.kt) follows exactly:
   1. the address's hex digits, upper case, nothing else ("D4:3D:39:A1:B2:C3" -> "D43D39A1B2C3");
   2. their FNV-1a 32-bit hash (offset basis 2166136261, prime 16777619, over the ASCII bytes);
-  3. adjective = ADJECTIVES[hash % 64], animal = ANIMALS[(hash >> 6) % 64].
+  3. adjective = ADJECTIVES[hash % 64], animal = ANIMALS[(hash >> 6) % 64],
+     number = (hash >> 12) % 10 + 1;
+  4. "Adjective Animal N" in English, 形容词动物N号 in Chinese.
 The lists below are part of the recipe: never reorder or change an entry, or every glove gets a
-new name. 4096 names: two gloves sharing one is possible but rare, and renaming one settles it.
+new name. 40960 names: about a 0.1% chance that 10 gloves have two alike, 3% for 50, and
+renaming one settles it.
 """
 
 from __future__ import annotations
@@ -66,7 +69,7 @@ def _hash(address: str) -> int:
 
 
 def auto_name(address: str, chinese: bool = False) -> str:
-    """The glove's own name, from its address: "Amber Otter", or "琥珀水獭" in Chinese."""
+    """The glove's own name, from its address: "Amber Otter 4", or "琥珀水獭4号" in Chinese."""
     h = _hash(address)
-    adjective, animal = ADJECTIVES[h % 64], ANIMALS[(h >> 6) % 64]
-    return adjective[1] + animal[1] if chinese else f"{adjective[0]} {animal[0]}"
+    adjective, animal, number = ADJECTIVES[h % 64], ANIMALS[(h >> 6) % 64], (h >> 12) % 10 + 1
+    return f"{adjective[1]}{animal[1]}{number}号" if chinese else f"{adjective[0]} {animal[0]} {number}"

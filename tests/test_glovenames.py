@@ -18,11 +18,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from hexr.glovenames import ADJECTIVES, ANIMALS, auto_name  # noqa: E402
 
 REFERENCE = {
-    "D4:3D:39:A1:B2:C3": ("Fiery Panther", "火焰黑豹"),
-    "D4:3D:39:D4:E5:F6": ("Velvet Finch", "丝绒雀鸟"),
-    "00:00:00:00:00:00": ("Swift Finch", "飞速雀鸟"),
-    "FF:FF:FF:FF:FF:FF": ("Swift Squirrel", "飞速松鼠"),
-    "C8:F0:9E:12:34:56": ("Zesty Kiwi", "热情几维鸟"),
+    "D4:3D:39:A1:B2:C3": ("Fiery Panther 3", "火焰黑豹3号"),
+    "D4:3D:39:D4:E5:F6": ("Velvet Finch 5", "丝绒雀鸟5号"),
+    "00:00:00:00:00:00": ("Swift Finch 1", "飞速雀鸟1号"),
+    "FF:FF:FF:FF:FF:FF": ("Swift Squirrel 2", "飞速松鼠2号"),
+    "C8:F0:9E:12:34:56": ("Zesty Kiwi 2", "热情几维鸟2号"),
 }
 
 
@@ -33,8 +33,8 @@ def test_names_match_the_reference_every_companion_uses():
 
 
 def test_the_way_an_address_is_written_does_not_change_the_name():
-    assert auto_name("d4:3d:39:a1:b2:c3") == auto_name("D43D39A1B2C3") == "Fiery Panther"
-    assert auto_name("D4-3D-39-A1-B2-C3") == "Fiery Panther"
+    assert auto_name("d4:3d:39:a1:b2:c3") == auto_name("D43D39A1B2C3") == "Fiery Panther 3"
+    assert auto_name("D4-3D-39-A1-B2-C3") == "Fiery Panther 3"
 
 
 def test_the_words_are_all_different():
@@ -49,8 +49,8 @@ def test_a_room_of_gloves_rarely_shares_a_name():
         room = {":".join(f"{rng.randrange(256):02X}" for _ in range(6)) for _ in range(10)}
         names = [auto_name(a) for a in room]
         clashes += len(names) != len(set(names))
-    # Ten gloves among 4096 names: about one room in a hundred has two alike.
-    assert clashes < 60, clashes
+    # Ten gloves among 40960 names: about one room in a thousand has two alike.
+    assert clashes < 10, clashes
 
 
 if __name__ == "__main__":
