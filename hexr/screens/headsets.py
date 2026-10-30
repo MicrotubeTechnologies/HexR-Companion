@@ -914,8 +914,10 @@ class _GloveFinder(tk.Frame):
         super().__init__(parent, bg=T.SURFACE)
         self.model = detail.model
         self.key = detail.key
+        self.screen_ = detail.screen_
         self._shown = None            # what the section was last drawn from
         self._renaming: str | None = None
+        self._follow = False          # Find gloves was pressed: show what it finds
 
         head = tk.Frame(self, bg=T.SURFACE)
         head.pack(fill="x")
@@ -990,6 +992,12 @@ class _GloveFinder(tk.Frame):
                     Divider(card).pack(fill="x")
                 self._found_row(card, g, saved_by.get(g.address.upper()), usable)
 
+        # The picture above takes most of the window, so what a search finds, and the buttons
+        # that connect it, would be below its bottom edge with nothing to say so.
+        if self._follow and search.state != "searching":
+            self._follow = False
+            self.after_idle(lambda: self.winfo_exists() and self.screen_.reveal(self))
+
     def _glove_label(self, address: str, hand: str = "") -> str:
         """The name given to this glove here, or else its own name from its address, the one
         every HEXR Companion gives it."""
@@ -1045,7 +1053,9 @@ class _GloveFinder(tk.Frame):
             b.pack(side="right", padx=(8, 0))
 
     def _find(self):
+        self._follow = True
         self.model.search_gloves(self.key)
+        self.after_idle(lambda: self.winfo_exists() and self.screen_.reveal(self))
 
     def _rename(self, address: str):
         self._renaming = address

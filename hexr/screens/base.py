@@ -142,6 +142,9 @@ class Screen(tk.Frame):
     def scroll_to(self, widget):
         self._area.scroll_to(widget)
 
+    def reveal(self, widget):
+        self._area.reveal(widget)
+
     def on_show(self):
         """Called each time the screen becomes visible."""
 
