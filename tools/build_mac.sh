@@ -58,9 +58,10 @@ fi
 "$VENV/bin/pip" install -q --upgrade pip
 "$VENV/bin/pip" install -q -r requirements.txt pyinstaller delocate certifi
 
-# Pillow and PyAV ship an arm64 wheel and an Intel wheel but no universal2
-# one, and PyInstaller refuses single-arch binaries in a universal app. Fuse
-# each pair into one, at the version requirements.txt installed.
+# Pillow, PyAV and cffi (which sounddevice plays the sound through) ship an
+# arm64 wheel and an Intel wheel but no universal2 one, and PyInstaller refuses
+# single-arch binaries in a universal app. Fuse each pair into one, at the
+# version requirements.txt installed.
 PY_TAG="$("$VENV/bin/python" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
 fuse() {  # fuse <package> <import name>
   local version wheels plat
@@ -76,12 +77,14 @@ fuse() {  # fuse <package> <import name>
 }
 fuse pillow PIL
 fuse av av
+fuse cffi cffi
 
 step "Running protocol tests"
 "$VENV/bin/python" tests/test_protocol.py
 "$VENV/bin/python" tests/test_remote.py
 "$VENV/bin/python" tests/test_i18n.py
 "$VENV/bin/python" tests/test_sideload.py
+"$VENV/bin/python" tests/test_glovenames.py
 
 # -------------------------------------------------------------- adb
 # Google's adb for the APK Sideload screen: the app carries it, so it needs no internet.
