@@ -14,10 +14,11 @@ import time
 import tkinter as tk
 from types import SimpleNamespace
 
+from .. import glovenames
 from .. import theme as T
 from ..gloveview import GloveView
 from ..haptics import FINGERS, HandState, level_from_kpa
-from ..i18n import N_, tr
+from ..i18n import N_, language, tr
 from ..state import HANDS
 from ..widgets import Button, Dot, SignalBars
 from .base import Screen
@@ -181,13 +182,20 @@ class ConnectScreen(Screen):
             self._schedule(10)
         self.refresh()
 
+    def _glove_label(self, address: str) -> str:
+        """The glove's name: one given in Headsets, or else its own from its address, the same
+        on every HEXR Companion and in HexR apps."""
+        headsets = getattr(self.app, "headsets", None)
+        given = headsets.glove_name(address) if headsets else ""
+        return given or glovenames.auto_name(address, chinese=language() == "zh")
+
     def _choose(self, hand: str, options: list[dict]):
-        """Two kits nearby, both "HaptGloveAR Left": pick by the end of the address."""
+        """Two kits nearby, both "HaptGloveAR Left": pick by the glove's own name."""
         m = tk.Menu(self, tearoff=0, bg=T.RAISED, fg=T.TEXT, activebackground=T.ACCENT,
                     activeforeground=T.CANVAS, bd=0, relief="flat", font=T.font(12.5))
         for f in options:
             bars = "▂▄▆█"[:SignalBars.bars(f.get("rssi"))] or "·"
-            m.add_command(label=f"{f['name']}  ·  {f['address'][-5:]}   {bars}",
+            m.add_command(label=f"{self._glove_label(f['address'])}   {bars}",
                           command=lambda f=f: self._connect(f))
         btn = self.slots[hand].btn
         try:
@@ -213,7 +221,8 @@ class ConnectScreen(Screen):
         if g and g.connected:
             live = g.is_live()
             battery = g.battery_label()
-            word, colour = tr("Connected") + ("" if battery == "—" else f" · {battery}"), T.SUCCESS
+            word, colour = tr("Connected") + f" · {self._glove_label(g.address)}" + \
+                ("" if battery == "—" else f" · {battery}"), T.SUCCESS
             action, label = ("disconnect", tr("Disconnect")) if self.panel else (None, "")
             dim = 1.0
             # Lit green to say it is here; a fingertip pressing on something glows orange.
@@ -224,7 +233,7 @@ class ConnectScreen(Screen):
                 g.address, tr("battery {level}", level=battery),
                 tr("Source {kpa} kPa", kpa=f"{g.source_kpa():.1f}") if live else tr("no telemetry")]))
         elif g and g.connecting:
-            word, colour = tr("Connecting…"), T.ACCENT
+            word, colour = tr("Connecting…") + f" · {self._glove_label(g.address)}", T.ACCENT
             action, label, dim = "busy", tr("Connecting…"), 0.7
             details = g.address
         elif g and g.status.startswith("Error: "):
@@ -232,9 +241,11 @@ class ConnectScreen(Screen):
             action, label = ("connect", tr("Connect")) if options else (None, "")
             details = g.status[len("Error: "):]
         elif options:
-            word, colour = tr("Found"), T.SUCCESS
+            word, colour = tr("Found") + (f" · {self._glove_label(options[0]['address'])}"
+                                          if len(options) == 1 else ""), T.SUCCESS
             action, label, dim = "connect", tr("Connect"), 0.6
-            details = "\n".join(f"{f['address']}  {f.get('rssi', '—')} dBm" for f in options)
+            details = "\n".join(f"{self._glove_label(f['address'])}  {f.get('rssi', '—')} dBm"
+                                for f in options)
         elif self.error:
             word, colour = tr("Bluetooth unavailable"), T.DANGER
             action, label = "retry", tr("Try again")
